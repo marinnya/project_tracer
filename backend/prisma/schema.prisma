@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+
+model Project {
+  id                  Int       @id @default(autoincrement())
+  name                String
+  startDate           DateTime?
+  endDate             DateTime?
+  responsible         String
+  responsibleId       String?
+  oneCResponsibleId   String?   // ID ответственного сотрудника в 1С
+  oneCId              String?   @unique
+  status              String    @default("В работе")
+  archivedAt          DateTime?
+  createdAt           DateTime  @default(now())
+
+  photos          ProjectPhoto[]
+  draft           ProjectDraft?
+  responsibleUser User?   @relation(fields: [responsibleId], references: [id])
+}
+
+model User {
+  id           String    @id @default(uuid())
+  firstName    String
+  lastName     String
+  login        String    @unique
+  passwordHash String
+  oneCId       String?   @unique
+  role         Role      @default(EMPLOYEE)
+  isBlocked    Boolean   @default(false)
+  email        String?   @unique
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  passwordResetTokens PasswordResetToken[]
+  projects            Project[]            // обратная связь
+}
+
+model ProjectPhoto {
+  id          Int      @id @default(autoincrement())
+  projectId   Int
+  section     String   // название секции, например "титульный"
+  defectType  String?  // только для дефектов, например "коррозия"
+  filename    String   // имя файла после переименования
+  yandexPath  String?  // путь на Яндекс.Диске (заполняется после отправки)
+  order       Int      // порядковый номер внутри секции
+  createdAt   DateTime @default(now())
+
+  project     Project  @relation(fields: [projectId], references: [id])
+}
+
+// Черновик — хранит состояние формы пока сотрудник не нажал "Записать"
+model ProjectDraft {
+  id          Int      @id @default(autoincrement())
+  projectId   Int      @unique
+  sections    Json     // { "титульный": { pages: 3 }, ... }
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id])
+}
+
+
+// новая таблица для токенов восстановления
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime // токен живёт 1 час
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+}
