@@ -1,64 +1,71 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "../styles/successModal.css";
+import api from "../utils/api";
 
 // Типы для пропсов
 type Props = {
   onClose: () => void;
-  // функция вызывается при сохранении данных сотрудника, работает с этими полями, ничего не возвращает (void)
-  onSave: (employee: { firstName: string; lastName: string; login: string; password: string; role: "admin" | "employee" }) => void;
+  // добавлен oneCId — нужен для связи сотрудника с проектами из 1С
+  onSave: (employee: { firstName: string; lastName: string; login: string; password: string; role: "ADMIN" | "EMPLOYEE"; oneCId: string }) => void;
 };
 
-// Вариант выбора сотрудника (для выпадающего списка)
-type EmployeeOption = {
-  id: number;
-  name: string;
+// тип сотрудника из 1С
+type OneCEmployee = {
+  id: string;       // oneCId — уникальный идентификатор в 1С
+  firstName: string;
+  lastName: string;
 };
 
-// Заглушка — в будущем можно тянуть из 1С
-const employees: EmployeeOption[] = [
-  { id: 1, name: "Иван Иванов" },
-  { id: 2, name: "Петр Петров" },
-  { id: 3, name: "Алена Сидорова" },
-  { id: 4, name: "Евгений Журавлев" },
-];
-
-// Копмонент работает с пропсами: onClose, onSave
 export default function AddModal({ onClose, onSave }: Props) {
-  const [employeeId, setEmployeeId] = useState<number | "">(""); // состояние хранит выбранного сотрудника по id
+  const [selectedOneCId, setSelectedOneCId] = useState(""); // выбранный сотрудник из 1С
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "employee">("employee");
   const [error, setError] = useState("");
+  const [employees, setEmployees] = useState<OneCEmployee[]>([]); // список сотрудников из 1С
+  const [isLoading, setIsLoading] = useState(true); // загружаются ли сотрудники
+
+  // загружаем список сотрудников из 1С при открытии модалки
+  /*useEffect(() => {
+    api.get("/users/onec-employees")
+      .then(res => setEmployees(res.data))
+      .catch(() => setError("Не удалось загрузить список сотрудников"))
+      .finally(() => setIsLoading(false));
+  }, []);*/
+
+
+  useEffect(() => {
+    api.get("/users/onec-employees")
+      .then(res => setEmployees(res.data))
+      .catch(() => setError("Не удалось загрузить список сотрудников"))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   // функция проверяет заполнение полей
   const handleSubmit = () => {
     setError("");
 
-    if (!login || !password || !employeeId) {
-        setError("Заполните все поля");
-        return;
+    if (!login || !password || !selectedOneCId) {
+      setError("Заполните все поля");
+      return;
     }
 
-    // Находим выбранного сотрудника
-    const employeeObj = employees.find((e) => e.id === employeeId);
+    // находим выбранного сотрудника по oneCId
+    const employeeObj = employees.find((e) => e.id === selectedOneCId);
     if (!employeeObj) {
-        setError("Выберите сотрудника из списка");
-        return;
+      setError("Выберите сотрудника из списка");
+      return;
     }
 
-    const nameParts = employeeObj.name.split(" "); // делит строку на массив по пробелам ["Иван", "Иванов"]
-    const firstName = nameParts[0] || "";  // имя
-    const lastName = nameParts.slice(1).join(" ") || ""; // фамилия
-
-    // Вызываем функцию добавления из пропсов, передаем объект сотрудника с полями
+    // передаём данные в родительский компонент для сохранения
     onSave({
-        firstName,
-        lastName,
-        login,
-        password,
-        role,
+      firstName: employeeObj.firstName,
+      lastName: employeeObj.lastName,
+      login,
+      password,
+      role: "EMPLOYEE", // новые пользователи всегда сотрудники
+      oneCId: employeeObj.id, // передаём oneCId для связи с проектами
     });
-    onClose(); // закрываем модалку
+    onClose();
   };
 
   return (
@@ -66,16 +73,23 @@ export default function AddModal({ onClose, onSave }: Props) {
       <div className="modal_edit" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>×</button>
         <h2>Добавление сотрудника</h2>
-        
+
         <div className="modal-form">
           <div className="form-row">
             <label>Сотрудник</label>
-            <select value={employeeId} onChange={(e) => setEmployeeId(Number(e.target.value))}>
-              <option value="">Выберите сотрудника</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>{emp.name}</option>
-              ))}
-            </select>
+            {isLoading ? (
+              <select disabled><option>Загрузка...</option></select>
+            ) : (
+              <select value={selectedOneCId} onChange={(e) => setSelectedOneCId(e.target.value)}>
+                <option value="">Выберите сотрудника</option>
+                {/* список сотрудников из 1С */}
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.firstName} {emp.lastName}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="form-row">
@@ -87,14 +101,6 @@ export default function AddModal({ onClose, onSave }: Props) {
             <label>Пароль</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
-
-          {/*<div className="form-row">
-            <label>Роль</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as "admin" | "employee")}>
-              <option value="employee">Сотрудник</option>
-              <option value="admin">Администратор</option>
-            </select>
-          </div>*/}
         </div>
 
         {error && <div className="error">{error}</div>}

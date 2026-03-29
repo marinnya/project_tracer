@@ -26,6 +26,8 @@ model Project {
   archivedAt          DateTime?
   createdAt           DateTime  @default(now())
 
+  folderUrl           String?   // ссылка на папку Яндекс.Диска
+
   photos          ProjectPhoto[]
   draft           ProjectDraft?
   responsibleUser User?   @relation(fields: [responsibleId], references: [id])

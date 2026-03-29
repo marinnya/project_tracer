@@ -76,7 +76,7 @@ export class ProjectsController {
   }
 
   // кнопка "Записать" — читает файлы из временной папки и загружает на Яндекс.Диск
-  @Post(':id/upload')
+@Post(':id/upload')
   async uploadFiles(
     @Param('id', ParseIntPipe) projectId: number,
     @Body() body: { projectName: string; photos: string },
@@ -98,7 +98,11 @@ export class ProjectsController {
       this.logger.log(`Файлов прочитано из временной папки: ${files.length}`);
 
       // загружаем на Яндекс.Диск
-      const { folderUrl } = await this.projectService.uploadToYandex(files, body.projectName, photos);
+      const { folderUrl } = await this.projectService.uploadToYandex(
+        files,
+        body.projectName,
+        photos,
+      );
       this.logger.log(`Яндекс.Диск — папка создана: ${folderUrl}`);
 
       // сохраняем метаданные фото с путём на Яндекс.Диске
@@ -109,19 +113,24 @@ export class ProjectsController {
       await this.projectService.savePhotos(projectId, photosWithPath);
       this.logger.log(`Метаданные фото сохранены в БД`);
 
+      // СОХРАНЯЕМ ССЫЛКУ НА ПАПКУ В ПРОЕКТЕ
+      await this.projectService.prisma.project.update({
+        where: { id: projectId },
+        data: { folderUrl },
+      });
+      this.logger.log(`Ссылка на папку сохранена в проекте`);
+
       // архивируем проект после успешной загрузки
       await this.projectService.archiveProject(projectId);
       this.logger.log(`Проект ${projectId} перемещён в архив`);
 
+      // ОТПРАВЛЯЕМ ДАННЫЕ В 1С ОДНИМ ЗАПРОСОМ
+      await this.projectService.sendProjectToOneC(projectId);
+      this.logger.log(`Данные отправлены в 1С`);
+
       // удаляем временную папку — файлы уже на Яндекс.Диске
       fs.rmSync(tmpDir, { recursive: true, force: true });
       this.logger.log(`Временная папка удалена: ${tmpDir}`);
-
-      // TODO: отправить ссылку в 1С когда будет готов API
-      // const project = await this.projectService.getProjectById(projectId);
-      // if (project.oneCId) {
-      //   await this.oneCService.sendFolderUrl(project.oneCId, folderUrl);
-      // }
 
       return { message: 'Файлы загружены', folderUrl };
     } catch (e: any) {

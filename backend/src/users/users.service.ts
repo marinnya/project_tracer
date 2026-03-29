@@ -7,7 +7,15 @@ import { Role } from '@prisma/client';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  async create(data: any) {
+  async create(data: {
+    firstName: string;
+    lastName: string;
+    login: string;
+    password: string;
+    role: string;
+    oneCId?: string;
+  }) {
+    // проверяем что логин не занят
     const existing = await this.prisma.user.findUnique({
       where: { login: data.login },
     });
@@ -18,19 +26,34 @@ export class UsersService {
 
     const hash = await bcrypt.hash(data.password, 10);
 
-    let roleEnum: Role = data.role?.toLowerCase() === 'admin' ? Role.ADMIN : Role.EMPLOYEE;
+    const roleEnum: Role = data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
 
-    return this.prisma.user.create({
+    // создаём пользователя с oneCId если передан
+    const user = await this.prisma.user.create({
       data: {
         firstName: data.firstName,
         lastName: data.lastName,
         login: data.login,
         passwordHash: hash,
         role: roleEnum,
+        oneCId: data.oneCId ?? null, // ID сотрудника в 1С — для связи с проектами
       },
     });
+
+    // если у нового пользователя есть oneCId —
+    // связываем все проекты где oneCResponsibleId совпадает с его oneCId
+    // это нужно когда проект подгрузился из 1С раньше чем сотрудника добавили в приложение
+    if (user.oneCId) {
+      await this.prisma.project.updateMany({
+        where: { oneCResponsibleId: user.oneCId },
+        data: { responsibleId: user.id },
+      });
+    }
+
+    return user;
   }
 
+  // возвращает всех активных сотрудников (не удалённых)
   async findAllEmployees() {
     return this.prisma.user.findMany({
       where: {
@@ -56,6 +79,7 @@ export class UsersService {
     });
   }
 
+  // блокировка/разблокировка пользователя
   async blockUser(userId: string, value: boolean) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -63,6 +87,7 @@ export class UsersService {
     });
   }
 
+  // мягкое удаление — проставляем deletedAt вместо физического удаления
   async deleteUser(userId: string) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -70,6 +95,7 @@ export class UsersService {
     });
   }
 
+  // поиск по логину — используется при авторизации
   async findByLogin(login: string) {
     return this.prisma.user.findFirst({
       where: {
@@ -79,9 +105,9 @@ export class UsersService {
     });
   }
 
-  // для редактирования логина или пароля
+  // редактирование логина или пароля
   async updateUser(userId: string, data: { login?: string; password?: string }) {
-    const updateData: any = {};
+    const updateData: Partial<{ login: string; passwordHash: string }> = {};
 
     if (data.login) updateData.login = data.login;
     if (data.password) updateData.passwordHash = await bcrypt.hash(data.password, 10);
@@ -91,5 +117,4 @@ export class UsersService {
       data: updateData,
     });
   }
-
 }

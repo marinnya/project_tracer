@@ -262,4 +262,38 @@ export class ProjectsService {
   });
 }
 
+
+  /**
+   * Собирает данные проекта и отправляет в 1С одним запросом
+   */
+  async sendProjectToOneC(projectId: number) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      console.warn(`Проект ${projectId} не найден`);
+      return;
+    }
+
+    // если проект не из 1С — ничего не отправляем
+    if (!project.oneCId) {
+      console.log(`Проект ${projectId} не связан с 1С`);
+      return;
+    }
+
+    try {
+      await this.oneCService.sendProjectUpdate({
+        oneCId: project.oneCId,
+        startDate: project.startDate,
+        endDate: project.endDate,
+        folderUrl: project.folderUrl,
+      });
+
+      console.log(`Проект ${projectId} отправлен в 1С`);
+    } catch (e: any) {
+      console.error(`Ошибка отправки проекта ${projectId} в 1С:`, e.message);
+    }
+  }
+
 }
