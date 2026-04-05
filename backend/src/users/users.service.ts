@@ -15,7 +15,37 @@ export class UsersService {
     role: string;
     oneCId?: string;
   }) {
-    // проверяем что логин не занят
+    const hash = await bcrypt.hash(data.password, 10);
+    const roleEnum: Role = data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
+
+    // если передан oneCId — ищем существующего пользователя из 1С
+    if (data.oneCId) {
+      const existingByOneCId = await this.prisma.user.findUnique({
+        where: { oneCId: data.oneCId },
+      });
+
+      if (existingByOneCId) {
+        // пользователь уже есть в БД (пришёл из 1С) — обновляем логин и пароль
+        const user = await this.prisma.user.update({
+          where: { oneCId: data.oneCId },
+          data: {
+            login: data.login,
+            passwordHash: hash,
+            role: roleEnum,
+          },
+        });
+
+        // связываем все проекты где oneCResponsibleId совпадает с его oneCId
+        await this.prisma.project.updateMany({
+          where: { oneCResponsibleId: user.oneCId! },
+          data: { responsibleId: user.id },
+        });
+
+        return user;
+      }
+    }
+
+    // пользователя с таким oneCId нет — проверяем что логин не занят
     const existing = await this.prisma.user.findUnique({
       where: { login: data.login },
     });
@@ -24,11 +54,7 @@ export class UsersService {
       throw new BadRequestException('Login already exists');
     }
 
-    const hash = await bcrypt.hash(data.password, 10);
-
-    const roleEnum: Role = data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
-
-    // создаём пользователя с oneCId если передан
+    // создаём нового пользователя
     const user = await this.prisma.user.create({
       data: {
         firstName: data.firstName,
