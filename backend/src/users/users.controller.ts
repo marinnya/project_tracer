@@ -23,6 +23,13 @@ export class UsersController {
     private oneCService: OneCService, // добавили OneCService
   ) {}
 
+  // получение сотрудников из БД для выпадающего списка в AddModal
+  @Roles(Role.ADMIN)
+  @Get('onec-employees') // должен быть ДО @Get(), @Patch(':id') и т.д.
+  async getOneCEmployees() {
+    return this.oneCService.getEmployeesForSelect();
+  }
+
   @Roles(Role.ADMIN)
   @Post()
   async create(@Body() dto: { firstName: string; lastName: string; login: string; password: string; role: string }) {
@@ -65,10 +72,4 @@ export class UsersController {
     return this.usersService.updateUser(id, body);
   }
 
-  // получение сотрудников из 1С для выпадающего списка в AddModal
-  @Roles(Role.ADMIN)
-  @Get('onec-employees')
-  async getOneCEmployees() {
-    return this.oneCService.getEmployeesForSelect();
-  }
 }

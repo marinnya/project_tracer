@@ -24,14 +24,6 @@ export default function AddModal({ onClose, onSave }: Props) {
   const [employees, setEmployees] = useState<OneCEmployee[]>([]); // список сотрудников из 1С
   const [isLoading, setIsLoading] = useState(true); // загружаются ли сотрудники
 
-  // загружаем список сотрудников из 1С при открытии модалки
-  /*useEffect(() => {
-    api.get("/users/onec-employees")
-      .then(res => setEmployees(res.data))
-      .catch(() => setError("Не удалось загрузить список сотрудников"))
-      .finally(() => setIsLoading(false));
-  }, []);*/
-
 
   useEffect(() => {
     api.get("/users/onec-employees")

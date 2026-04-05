@@ -47,8 +47,8 @@ export class OneCService {
             oneCId: emp.id,
             firstName: emp.firstName,
             lastName: emp.lastName,
-            login: '', // админ добавит позже
-            passwordHash: '', // админ добавит позже
+            login: `onec_${emp.id}`, // временный уникальный логин
+            passwordHash: '',
             role: 'EMPLOYEE',
           },
         });
@@ -119,9 +119,6 @@ export class OneCService {
   /**
    * Отправка обновлённых дат проекта в 1С
    */
-  /**
- * Отправка ВСЕХ данных проекта в 1С одним запросом
- */
   async sendProjectUpdate(data: {
     oneCId: string;
     startDate: Date | null;
@@ -153,8 +150,9 @@ export class OneCService {
       );
 
       this.logger.log(`1С ответ: ${JSON.stringify(response.data)}`);
-    } catch (e: any) {
-      this.logger.error(`Ошибка отправки в 1С: ${e.message}`);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Ошибка отправки в 1С: ${message}`);
     }
   }
 }

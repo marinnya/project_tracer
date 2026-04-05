@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import "../styles/dashboard.css";
 import Header from "../components/Header";
 import AddModal from "../components/AddModal";
@@ -8,6 +8,16 @@ import DeleteModal from "../components/DeleteModal";
 import type { Employee } from "../types/Employee";
 import { useClickOutside } from "../hooks/useClickOutside";
 import api from "../utils/api";
+
+// тип сотрудника для списка на странице
+type EmployeeData = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  login: string;
+  isBlocked: boolean;
+  role: string;
+};
 
 // пропс onLogout передаётся из App.tsx и пробрасывается в Header
 type Props = {
@@ -22,13 +32,12 @@ export default function EmployeesPage({ onLogout }: Props) {
   const [showModalDelete, setShowModalDelete] = useState(false); // состояние для модального окна удаления
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null); // состояние для выбранного сотрудника
   const [filterOpen, setFilterOpen] = useState(false); // состояние для окна фильтров (мобильное)
-  const [employees, setEmployees] = useState<any[]>([]); // состояние для загрузки сотрудников на страницу
+  const [employees, setEmployees] = useState<EmployeeData[]>([]); // состояние для загрузки сотрудников на страницу
 
-  // Для закрытия фильтров по клику вне области
   // useRef - хук, который создаёт ссылку на DOM-элемент
-  const filterRef = useRef<HTMLDivElement | null>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
   // пользовательский хук, который реагирует на клики вне указанного элемента
-  useClickOutside(filterRef, () => setFilterOpen(false));
+  useClickOutside(filterRef as React.RefObject<HTMLElement>, () => setFilterOpen(false));
 
   // если выбран архив, показываем только заблокированных
   const filteredEmployees = employees.filter(emp =>
@@ -36,19 +45,20 @@ export default function EmployeesPage({ onLogout }: Props) {
   );
 
   // асинхронная функция для получения сотрудников
-  const fetchEmployees = async () => {
+  // асинхронная функция для получения сотрудников — используется после добавления/редактирования/удаления
+  const fetchEmployees = useCallback(async () => {
     try {
-      // асинхронный запрос к серверу, токен подставляется автоматически через api.ts
-      const res = await api.get("/users");
-      setEmployees(res.data); // сохраняем полученные данные в состояние (для перерисовки списка сотрудников)
+      const res = await api.get<EmployeeData[]>("/users");
+      setEmployees(res.data); // бэкенд уже отфильтровал
     } catch (err) {
       console.error(err);
     }
-  };
+  }, []);
 
+  // загружаем сотрудников при монтировании компонента
   useEffect(() => {
     fetchEmployees();
-  }, []); // пустой массив зависимостей, т.е. функция выполняется 1 раз при монтировании компонента
+  }, [fetchEmployees]);
 
   // редактирование; функция принимает объект сотрудника и сохраняет его в состояние
   const openEditModal = (emp: Employee) => {
@@ -69,7 +79,7 @@ export default function EmployeesPage({ onLogout }: Props) {
   };
 
   // Асинхронная функция для добавления: принимает объект нового сотрудника
-  const addEmployee = async (newEmployee: { firstName: string; lastName: string; login: string; password: string; role: string }) => {
+  const addEmployee = async (newEmployee: { firstName: string; lastName: string; login: string; password: string; role: string; oneCId: string }) => {
     try {
       await api.post("/users", newEmployee); // токен подставляется автоматически
       await fetchEmployees(); // после успешного добавления заново загружаем список сотрудников
@@ -79,7 +89,7 @@ export default function EmployeesPage({ onLogout }: Props) {
   };
 
   // Асинхронная функция для редактирования: принимает id сотрудника и измененные поля (можно не все)
-  const editEmployee = async (id: number, updatedData: Partial<any>) => {
+  const editEmployee = async (id: number, updatedData: Partial<EmployeeData>) => {
     try {
       await api.patch(`/users/${id}`, updatedData); // отправляем только измененные поля
       await fetchEmployees(); // снова загружаем список сотрудников
@@ -130,7 +140,7 @@ export default function EmployeesPage({ onLogout }: Props) {
             </button>
           </div>
 
-          {/* AddModal - дочерний компонент, передаем ему 2 пропса: onClose и onSave для добавления сотрудника*/}
+          {/* AddModal - дочерний компонент, передаем ему 2 пропса: onClose и onSave для добавления сотрудника */}
           {showModalAdd && (<AddModal onClose={() => setShowModalAdd(false)} onSave={addEmployee} />)}
 
           {/* Десктопные фильтры */}
@@ -139,7 +149,7 @@ export default function EmployeesPage({ onLogout }: Props) {
             <button className={showArchive ? "active" : ""} onClick={() => setShowArchive(true)}>Заблокированные</button>
           </div>
 
-          {/* Мобильные фильтры */}
+          {/* Мобильные фильтры, ссылка на элемент для закрытия при внешнем клике */}
           <div className="mobile-only" ref={filterRef}>
             <button className="filter-icon-btn" onClick={() => setFilterOpen((prev) => !prev)}>
               <img src="/filter.png" alt="Фильтр" />
@@ -177,9 +187,9 @@ export default function EmployeesPage({ onLogout }: Props) {
                   <td>{employee.login}</td>
                   <td>{employee.isBlocked ? "Заблокирован" : "Активен"}</td>
                   <td className="status-actions">
-                    <span className="status edit" onClick={(e) => { e.stopPropagation(); openEditModal(employee); }}>Редактировать</span>
-                    <span className="status block" onClick={(e) => { e.stopPropagation(); openBlockModal(employee); }}>{employee.isBlocked ? "Разблокировать" : "Блокировать"}</span>
-                    <span className="status delete" onClick={(e) => { e.stopPropagation(); openDeleteModal(employee); }}>Удалить</span>
+                    <span className="status edit" onClick={(e) => { e.stopPropagation(); openEditModal(employee as unknown as Employee); }}>Редактировать</span>
+                    <span className="status block" onClick={(e) => { e.stopPropagation(); openBlockModal(employee as unknown as Employee); }}>{employee.isBlocked ? "Разблокировать" : "Блокировать"}</span>
+                    <span className="status delete" onClick={(e) => { e.stopPropagation(); openDeleteModal(employee as unknown as Employee); }}>Удалить</span>
                   </td>
                 </tr>
               ))}
@@ -200,15 +210,15 @@ export default function EmployeesPage({ onLogout }: Props) {
               </div>
 
               <div className="employee-actions">
-                <img src="/edit.png" alt="Редактировать" onClick={() => openEditModal(employee)} />
-                <img src="/lock.png" alt="Блокировать" onClick={() => openBlockModal(employee)} />
-                <img src="/trash.png" alt="Удалить" onClick={() => openDeleteModal(employee)} />
+                <img src="/edit.png" alt="Редактировать" onClick={() => openEditModal(employee as unknown as Employee)} />
+                <img src="/lock.png" alt="Блокировать" onClick={() => openBlockModal(employee as unknown as Employee)} />
+                <img src="/trash.png" alt="Удалить" onClick={() => openDeleteModal(employee as unknown as Employee)} />
               </div>
             </div>
           ))}
         </div>
 
-        {/*Модальные окна - дочерние компоненты, передаем им 3 пропса: employee, onClose и соответсвующий колбэк*/}
+        {/* Модальные окна - дочерние компоненты, передаем им 3 пропса: employee, onClose и соответствующий колбэк */}
         {showModalEdit && selectedEmployee && (<EditModal employee={selectedEmployee} onClose={() => setShowModalEdit(false)} onSave={editEmployee} />)}
         {showModalBlock && selectedEmployee && (<BlockModal employee={selectedEmployee} onClose={() => setShowModalBlock(false)} onBlock={toggleBlockEmployee} />)}
         {showModalDelete && selectedEmployee && (<DeleteModal employee={selectedEmployee} onClose={() => setShowModalDelete(false)} onDelete={deleteEmployee} />)}

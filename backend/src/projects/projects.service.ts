@@ -7,6 +7,14 @@ import { OneCService } from '../integrations/oneC/onec.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// тип файла для загрузки — buffer или путь на диске
+type UploadFile = {
+  originalname: string;
+  buffer?: Buffer;
+  path?: string;
+  mimetype: string;
+};
+
 @Injectable()
 export class ProjectsService {
 
@@ -30,18 +38,16 @@ export class ProjectsService {
         undefined,
         { headers: this.getHeaders() },
       );
-    } catch (e: any) {
-      if (e.response?.status === 409) return;
-      console.error('Яндекс ответил:', e.response?.status, JSON.stringify(e.response?.data));
-      throw new InternalServerErrorException(`Ошибка создания папки: ${e.message}`);
+    } catch (e: unknown) {
+      const err = e as { response?: { status?: number; data?: unknown }; message?: string };
+      if (err.response?.status === 409) return;
+      console.error('Яндекс ответил:', err.response?.status, JSON.stringify(err.response?.data));
+      throw new InternalServerErrorException(`Ошибка создания папки: ${err.message}`);
     }
   }
 
   // загружает один файл — принимает buffer или читает с диска
-  private async uploadFile(
-    file: { originalname: string; buffer?: Buffer; path?: string; mimetype: string },
-    folderPath: string,
-  ): Promise<void> {
+  private async uploadFile(file: UploadFile, folderPath: string): Promise<void> {
     const filename = Buffer.from(file.originalname, 'latin1').toString('utf8');
     const filePath = `${encodeURIComponent(folderPath)}/${encodeURIComponent(filename)}`;
 
@@ -59,16 +65,16 @@ export class ProjectsService {
   }
 
   private async getPublicUrl(folderName: string): Promise<string> {
-    const path = encodeURIComponent(folderName);
+    const encodedPath = encodeURIComponent(folderName);
 
     await axios.put(
-      `${this.baseUrl}/publish?path=${path}`,
+      `${this.baseUrl}/publish?path=${encodedPath}`,
       undefined,
       { headers: this.getHeaders() },
     );
 
     const { data } = await axios.get(
-      `${this.baseUrl}?path=${path}`,
+      `${this.baseUrl}?path=${encodedPath}`,
       { headers: this.getHeaders() },
     );
 
@@ -102,7 +108,7 @@ export class ProjectsService {
         path: filePath,
         mimetype: 'image/jpeg', // определяем по расширению если нужно
         buffer: undefined,
-      } as any;
+      } as unknown as Express.Multer.File;
     });
   }
 
@@ -122,7 +128,7 @@ export class ProjectsService {
 
   // основной метод: создаёт папку проекта, внутри — подпапки по секциям, загружает файлы
   async uploadToYandex(
-    files: any[],
+    files: UploadFile[],
     projectName: string,
     // метаданные нужны чтобы знать какой файл в какую секцию кладём
     photos: { section: string; filename: string; order: number; defectType?: string }[],
@@ -156,9 +162,10 @@ export class ProjectsService {
           const section = fileToSection.get(filename) ?? 'прочее';
           const folderPath = `${projectName}/${section}`;
 
-          return this.uploadFile(file, folderPath).catch((e: any) => {
+          return this.uploadFile(file, folderPath).catch((e: unknown) => {
+            const message = e instanceof Error ? e.message : String(e);
             throw new InternalServerErrorException(
-              `Ошибка загрузки файла ${file.originalname}: ${e.message}`
+              `Ошибка загрузки файла ${file.originalname}: ${message}`
             );
           });
         })
@@ -243,25 +250,16 @@ export class ProjectsService {
     });
   }
 
-  // синхронизация с 1С каждый час
-  @Cron(CronExpression.EVERY_HOUR)
-  async syncWithOneC() {
-    await this.oneCService.syncProjects();
-    //await this.oneCService.syncEmployees();
-  }
-
-
   // для обновления дат проекта
   async updateDates(projectId: number, startDate: string | null, endDate: string | null) {
-  return this.prisma.project.update({
-    where: { id: projectId },
-    data: {
-      startDate: startDate ? new Date(startDate) : null,
-      endDate: endDate ? new Date(endDate) : null,
-    },
-  });
-}
-
+    return this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+      },
+    });
+  }
 
   /**
    * Собирает данные проекта и отправляет в 1С одним запросом
@@ -291,9 +289,9 @@ export class ProjectsService {
       });
 
       console.log(`Проект ${projectId} отправлен в 1С`);
-    } catch (e: any) {
-      console.error(`Ошибка отправки проекта ${projectId} в 1С:`, e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`Ошибка отправки проекта ${projectId} в 1С:`, message);
     }
   }
-
 }

@@ -59,6 +59,7 @@ export class UsersService {
       where: {
         role: Role.EMPLOYEE,
         deletedAt: null,
+        NOT: { login: { startsWith: 'onec_' } }, // скрываем не добавленных админом
       },
     });
   }
