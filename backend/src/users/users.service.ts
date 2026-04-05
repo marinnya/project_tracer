@@ -32,6 +32,8 @@ export class UsersService {
             login: data.login,
             passwordHash: hash,
             role: roleEnum,
+            firstName: data.firstName, // добавить
+            lastName: data.lastName,   // добавить
           },
         });
 
