@@ -114,10 +114,7 @@ export class ProjectsController {
       this.logger.log(`Метаданные фото сохранены в БД`);
 
       // СОХРАНЯЕМ ССЫЛКУ НА ПАПКУ В ПРОЕКТЕ
-      await this.projectService.prisma.project.update({
-        where: { id: projectId },
-        data: { folderUrl },
-      });
+      await this.projectService.saveFolderUrl(projectId, folderUrl);
       this.logger.log(`Ссылка на папку сохранена в проекте`);
 
       // архивируем проект после успешной загрузки

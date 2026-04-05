@@ -199,6 +199,14 @@ export class ProjectsService {
     });
   }
 
+  // сохраняет ссылку на папку Яндекс.Диска в проекте
+  async saveFolderUrl(projectId: number, folderUrl: string) {
+    return this.prisma.project.update({
+      where: { id: projectId },
+      data: { folderUrl },
+    });
+  }
+
   async getProjectById(projectId: number) {
     return this.prisma.project.findUnique({ where: { id: projectId } });
   }
