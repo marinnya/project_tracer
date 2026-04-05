@@ -13,10 +13,13 @@ export class OneCController {
   @Post('sync')
   async syncFromOneC(@Body() body: { projects: OneCProject[]; employees: OneCEmployee[] }) {
     this.logger.log('Получены данные от 1С');
+    this.logger.log('Получены проекты:', JSON.stringify(body.projects, null, 2));
+    this.logger.log('Получены сотрудники:', JSON.stringify(body.employees, null, 2));
 
     const updatedProjects = await this.oneCService.syncFromOneC(body.projects, body.employees);
 
     this.logger.log('Синхронизация завершена');
     return { updatedProjects }; // возвращаем обратно 1С
   }
+
 }
