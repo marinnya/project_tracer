@@ -133,8 +133,8 @@ export class OneCService {
     });
 
     return users.map((u) => ({
-      id: u.id,          // UUID из БД
-      oneCId: u.oneCId!, // для связи с проектами
+      id: u.oneCId!,          // UUID из 1C
+      //neCId: u.oneCId!, // для связи с проектами
       firstName: u.firstName,
       lastName: u.lastName,
     }));
