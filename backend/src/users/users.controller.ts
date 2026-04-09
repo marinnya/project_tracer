@@ -32,7 +32,17 @@ export class UsersController {
 
   @Roles(Role.ADMIN)
   @Post()
-  async create(@Body() dto: { firstName: string; lastName: string; login: string; password: string; role: string }) {
+  async create(
+    @Body()
+    dto: {
+      firstName: string;
+      lastName: string;
+      login: string;
+      password: string;
+      role: string;
+      oneCId?: string;
+    },
+  ) {
     return this.usersService.create(dto);
   }
 
