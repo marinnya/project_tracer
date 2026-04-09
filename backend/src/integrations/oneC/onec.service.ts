@@ -127,13 +127,14 @@ export class OneCService {
   /**
    * Получить список сотрудников для селекта
    */
-  async getEmployeesForSelect(): Promise<OneCEmployee[]> {
+    async getEmployeesForSelect(): Promise<OneCEmployee[]> {
     const users = await this.prisma.user.findMany({
       where: { oneCId: { not: null } },
     });
 
     return users.map((u) => ({
-      id: u.oneCId!,
+      id: u.id,          // UUID из БД
+      oneCId: u.oneCId!, // для связи с проектами
       firstName: u.firstName,
       lastName: u.lastName,
     }));
