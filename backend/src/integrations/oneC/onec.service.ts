@@ -40,6 +40,18 @@ export class OneCService {
     // Сначала синхронизируем сотрудников
     for (const emp of employees) {
       try {
+        // --- проверка id сотрудника ---
+        if (!emp?.id || typeof emp.id !== 'string' || emp.id.trim() === '' || emp.id === 'emp1') {
+          this.logger.warn('Скип некорректного сотрудника: ' + JSON.stringify(emp));
+          continue;
+        }
+
+        // --- проверка имени ---
+        if (!emp.firstName || !emp.lastName) {
+          this.logger.warn('Скип сотрудника без имени: ' + JSON.stringify(emp));
+          continue;
+        }
+
         await this.prisma.user.upsert({
           where: { oneCId: emp.id },
           update: { firstName: emp.firstName, lastName: emp.lastName },
@@ -61,28 +73,36 @@ export class OneCService {
     // Синхронизация проектов
     for (const project of projects) {
       try {
-        const responsibleUser = await this.prisma.user.findUnique({
-          where: { oneCId: project.responsibleId },
-        });
+        // --- проверка id проекта ---
+        if (!project?.id || typeof project.id !== 'string' || project.id.trim() === '') {
+          this.logger.warn('Скип проекта с некорректным id: ' + JSON.stringify(project));
+          continue;
+        }
+
+        const responsibleUser = project.responsibleId
+          ? await this.prisma.user.findUnique({
+              where: { oneCId: project.responsibleId },
+            })
+          : null;
 
         await this.prisma.project.upsert({
           where: { oneCId: project.id },
           update: {
-            name: project.name,
-            responsible: project.responsible,
-            oneCResponsibleId: project.responsibleId,
+            name: project.name ?? '',
+            responsible: project.responsible ?? '',
+            oneCResponsibleId: project.responsibleId ?? null,
             responsibleId: responsibleUser?.id ?? null,
-            startDate: new Date(project.startDate),
-            endDate: new Date(project.endDate),
+            startDate: project.startDate ? new Date(project.startDate) : null,
+            endDate: project.endDate ? new Date(project.endDate) : null,
           },
           create: {
             oneCId: project.id,
-            name: project.name,
-            responsible: project.responsible,
-            oneCResponsibleId: project.responsibleId,
+            name: project.name ?? '',
+            responsible: project.responsible ?? '',
+            oneCResponsibleId: project.responsibleId ?? null,
             responsibleId: responsibleUser?.id ?? null,
-            startDate: new Date(project.startDate),
-            endDate: new Date(project.endDate),
+            startDate: project.startDate ? new Date(project.startDate) : null,
+            endDate: project.endDate ? new Date(project.endDate) : null,
             status: 'В работе',
           },
         });
@@ -93,7 +113,10 @@ export class OneCService {
     }
 
     // Возвращаем актуальные проекты для сверки с 1С
-    const oneCIds = projects.map((p) => p.id);
+    const oneCIds = projects
+      .filter(p => p?.id && typeof p.id === 'string' && p.id.trim() !== '')
+      .map((p) => p.id);
+
     const updatedProjects = await this.prisma.project.findMany({
       where: { oneCId: { in: oneCIds } },
     });
