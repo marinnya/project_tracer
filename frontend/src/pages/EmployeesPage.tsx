@@ -81,7 +81,7 @@ export default function EmployeesPage({ onLogout }: Props) {
   // Асинхронная функция для добавления: принимает объект нового сотрудника
   const addEmployee = async (newEmployee: { firstName: string; lastName: string; login: string; password: string; role: string; oneCId: string }) => {
     try {
-      await api.post("/users", newEmployee); // токен подставляется автоматически
+      await api.post("/users/", newEmployee); // токен подставляется автоматически
       await fetchEmployees(); // после успешного добавления заново загружаем список сотрудников
     } catch (err) {
       console.error(err);
