@@ -258,6 +258,16 @@ export class ProjectsService {
     });
   }
 
+  // Выводим проекты для сотрудника/админа
+  async getProjectsForUser(user: { id: string; role: string }) {
+    if (user.role === 'ADMIN') {
+      return this.prisma.project.findMany();
+    }
+    return this.prisma.project.findMany({
+      where: { responsibleId: user.id },
+    });
+  }
+
   // для обновления дат проекта
   async updateDates(projectId: number, startDate: string | null, endDate: string | null) {
     return this.prisma.project.update({

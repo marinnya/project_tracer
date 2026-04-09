@@ -9,6 +9,7 @@ import {
   Body,
   ParseIntPipe,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -146,8 +147,9 @@ export class ProjectsController {
 
   // возвращает список всех проектов
   @Get()
-  async getAll() {
-    return this.projectService.getAllProjects();
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  async getAll(@Req() req) {
+    return this.projectService.getProjectsForUser(req.user);
   }
 
   @Get(':id')
