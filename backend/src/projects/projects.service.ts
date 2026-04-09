@@ -2,6 +2,7 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import axios from 'axios';
 import { Express } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { User } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { OneCService } from '../integrations/oneC/onec.service';
 import * as fs from 'fs';
@@ -259,10 +260,13 @@ export class ProjectsService {
   }
 
   // Выводим проекты для сотрудника/админа
-  async getProjectsForUser(user: { id: string; role: string }) {
+  async getProjectsForUser(user: User) {
+    console.log('User:', user.id, user.oneCId);
+    console.log('Projects query filter:', { responsibleId: user.id, oneCResponsibleId: user.oneCId });
     if (user.role === 'ADMIN') {
       return this.prisma.project.findMany();
     }
+    
     return this.prisma.project.findMany({
       where: { responsibleId: user.id },
     });
