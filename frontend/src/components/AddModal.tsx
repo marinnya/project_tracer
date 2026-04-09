@@ -6,7 +6,7 @@ import api from "../utils/api";
 type Props = {
   onClose: () => void;
   // добавлен oneCId — нужен для связи сотрудника с проектами из 1С
-  onSave: (employee: { firstName: string; lastName: string; login: string; password: string; role: "ADMIN" | "EMPLOYEE"; oneCId: string }) => void;
+  onSave: (employee: { id: string; firstName: string; lastName: string; login: string; password: string; role: "ADMIN" | "EMPLOYEE"; oneCId: string }) => void;
 };
 
 // тип сотрудника из 1С
@@ -50,6 +50,7 @@ export default function AddModal({ onClose, onSave }: Props) {
 
     // передаём данные в родительский компонент для сохранения
     onSave({
+      id: employeeObj.id, // UUID из БД
       firstName: employeeObj.firstName,
       lastName: employeeObj.lastName,
       login,
