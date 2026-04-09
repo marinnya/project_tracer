@@ -15,6 +15,10 @@ export class UsersService {
     role: string;
     oneCId?: string;
   }) {
+
+    console.log('DTO:', data); // ← что пришло с фронта
+
+
     const hash = await bcrypt.hash(data.password, 10);
     const roleEnum: Role = data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
 
