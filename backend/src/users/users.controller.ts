@@ -43,6 +43,7 @@ export class UsersController {
       oneCId?: string;
     },
   ) {
+    console.log('CONTROLLER DTO RECEIVED:', dto); // <--- это первый лог
     return this.usersService.create(dto);
   }
 

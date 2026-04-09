@@ -16,6 +16,7 @@ export class UsersService {
     oneCId?: string;
   }) {
 
+    console.log('SERVICE CREATE CALLED');
     console.log('DTO:', data); // ← что пришло с фронта
 
 
