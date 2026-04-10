@@ -20,20 +20,24 @@ type Props = {
   onLogout: () => void;
 };
 
+// поля по которым можно сортировать
+type SortField = "name" | "startDate" | "endDate";
+type SortDirection = "asc" | "desc";
+
 export default function Dashboard({ onLogout }: Props) {
-  const navigate = useNavigate(); // хук из react-router-dom, который позволяет программно менять маршрут
-  const [showArchive, setShowArchive] = useState(false); // хук для управления архивом
-  const [filterOpen, setFilterOpen] = useState(false); // хук для управления фильтрами
+  const navigate = useNavigate();
+  const [showArchive, setShowArchive] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
-  const role = localStorage.getItem("role"); // роль для кнопки "Вернуть из архива"
+  const role = localStorage.getItem("role");
 
-  // useRef - хук, который создаёт ссылку на DOM-элемент
+  // состояние сортировки — поле и направление
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
   const filterRef = useRef<HTMLDivElement>(null);
-
-  // пользовательский хук, который реагирует на клики вне указанного элемента
   useClickOutside(filterRef as React.RefObject<HTMLElement>, () => setFilterOpen(false));
 
-  // загружаем проекты с бэкенда
   const fetchProjects = async () => {
     try {
       const res = await api.get("/projects");
@@ -45,28 +49,76 @@ export default function Dashboard({ onLogout }: Props) {
 
   useEffect(() => {
     fetchProjects();
-  }, []); // пустой массив зависимостей — выполняется 1 раз при монтировании компонента
+  }, []);
 
-  // Изначально показываем только проекты "В работе"
+  // при клике на заголовок колонки — меняем поле или переключаем направление
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // то же поле — переключаем направление
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      // новое поле — сортируем по возрастанию
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // сортировка проектов
+  const sortProjects = (list: Project[]) => {
+    return [...list].sort((a, b) => {
+      let valA: string | number = "";
+      let valB: string | number = "";
+
+      if (sortField === "name") {
+        valA = a.name.toLowerCase();
+        valB = b.name.toLowerCase();
+      } else if (sortField === "startDate") {
+        valA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        valB = b.startDate ? new Date(b.startDate).getTime() : 0;
+      } else if (sortField === "endDate") {
+        valA = a.endDate ? new Date(a.endDate).getTime() : 0;
+        valB = b.endDate ? new Date(b.endDate).getTime() : 0;
+      }
+
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  };
+
   const filtered = projects.filter((p) =>
     showArchive ? p.status === "Завершен" : p.status === "В работе"
   );
 
-  // возврат проекта из архива — только для админа
+  // применяем сортировку к отфильтрованному списку
+  const sorted = sortProjects(filtered);
+
   const handleUnarchive = async (e: React.MouseEvent, projectId: number) => {
-    e.stopPropagation(); // не открывать страницу проекта при клике на кнопку
+    e.stopPropagation();
     try {
       await api.patch(`/projects/${projectId}/unarchive`);
-      await fetchProjects(); // обновляем список после возврата
+      await fetchProjects();
     } catch (err) {
       console.error(err);
     }
   };
 
-  // форматируем дату для отображения
   const formatDate = (date: string | null) => {
     if (!date) return "—";
     return new Date(date).toLocaleDateString("ru-RU");
+  };
+
+  // стрелка сортировки — переворачивается в зависимости от направления
+  const SortArrow = ({ field }: { field: SortField }) => {
+    const isActive = sortField === field;
+    return (
+      <img
+        src="/sort_arrow.png"
+        alt="сортировка"
+        className={`sort-arrow ${isActive ? "active" : ""} ${isActive && sortDirection === "desc" ? "desc" : ""}`}
+        style={{ marginLeft: 4, width: 12, cursor: "pointer" }}
+      />
+    );
   };
 
   return (
@@ -108,18 +160,27 @@ export default function Dashboard({ onLogout }: Props) {
           <table className="projects-table">
             <thead>
               <tr>
-                <th>Наименование</th>
-                <th>Дата начала</th>
-                <th>Дата окончания</th>
+                {/* заголовки с кликабельной сортировкой */}
+                <th onClick={() => handleSort("name")} style={{ cursor: "pointer" }}>
+                  Наименование <SortArrow field="name" />
+                </th>
+                <th onClick={() => handleSort("startDate")} style={{ cursor: "pointer" }}>
+                  Дата начала <SortArrow field="startDate" />
+                </th>
+                <th onClick={() => handleSort("endDate")} style={{ cursor: "pointer" }}>
+                  Дата окончания <SortArrow field="endDate" />
+                </th>
                 <th>Ответственный</th>
                 <th>Статус</th>
-                {/* колонка действий — только в архиве для админа */}
                 {showArchive && role === "ADMIN" && <th>Действия</th>}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((project) => (
-                <tr key={project.id} className={showArchive ? "" :"clickable"} onClick={() => !showArchive && navigate(`/projects/${project.id}`)}>
+              {sorted.map((project) => (
+                <tr
+                  key={project.id}
+                  className={showArchive ? "" : "clickable"}
+                  onClick={() => !showArchive && navigate(`/projects/${project.id}`)}>
                   <td className="name">{project.name}</td>
                   <td>{formatDate(project.startDate)}</td>
                   <td>{formatDate(project.endDate)}</td>
@@ -129,7 +190,6 @@ export default function Dashboard({ onLogout }: Props) {
                       {project.status}
                     </span>
                   </td>
-                  {/* кнопка "Вернуть" — только в архиве для админа */}
                   {showArchive && role === "ADMIN" && (
                     <td>
                       <span className="status edit" onClick={(e) => handleUnarchive(e, project.id)}>
@@ -145,10 +205,10 @@ export default function Dashboard({ onLogout }: Props) {
 
         {/* Мобильная версия */}
         <div className="projects-mobile">
-          {filtered.map((project) => (
+          {sorted.map((project) => (
             <div
               key={project.id}
-              className= {showArchive ? "" : "project-card clickable"}
+              className={showArchive ? "" : "project-card clickable"}
               onClick={() => !showArchive && navigate(`/projects/${project.id}`)}>
 
               <div className="project-card-header">
@@ -169,7 +229,6 @@ export default function Dashboard({ onLogout }: Props) {
                 <span>{project.responsible}</span>
               </div>
 
-              {/* кнопка "Вернуть из архива" на мобильном — только для админа */}
               {showArchive && role === "ADMIN" && (
                 <span className="status edit" onClick={(e) => handleUnarchive(e, project.id)}>
                   Вернуть из архива

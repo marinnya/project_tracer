@@ -521,6 +521,20 @@ body {
   margin-top: 5px;
 }
 
+/*стрелка сотрировки*/
+.sort-arrow {
+  opacity: 0.3;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.sort-arrow.active {
+  opacity: 1;
+}
+
+.sort-arrow.desc {
+  transform: rotate(180deg);
+}
+
 
 /* === адаптация === */
 @media (max-width: 768px) {
