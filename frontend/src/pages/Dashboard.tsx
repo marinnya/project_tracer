@@ -54,12 +54,10 @@ export default function Dashboard({ onLogout }: Props) {
   // при клике на заголовок колонки — меняем поле или переключаем направление
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      // то же поле — переключаем направление
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
     } else {
-      // новое поле — сортируем по возрастанию
       setSortField(field);
-      setSortDirection("asc");
+      setSortDirection("desc"); // при первом клике на новое поле — сразу desc
     }
   };
 
@@ -111,14 +109,12 @@ export default function Dashboard({ onLogout }: Props) {
   // стрелка сортировки — только визуальный индикатор
   const SortArrow = ({ field }: { field: SortField }) => {
     const isActive = sortField === field;
-
     return (
       <img
-        src="/sort_arrow.png"
-        alt="сортировка"
-        className={`sort-arrow ${isActive ? "active" : ""} ${
-          isActive && sortDirection === "desc" ? "desc" : ""
-        }`}
+        src="/arrow_down.png"
+        alt=""
+        className={`arrow ${isActive && sortDirection === "asc" ? "open" : ""}`}
+        style={{ marginLeft: 4 }}
       />
     );
   };
