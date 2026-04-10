@@ -55,7 +55,7 @@ export default function Dashboard({ onLogout }: Props) {
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       // то же поле — переключаем направление
-      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
       // новое поле — сортируем по возрастанию
       setSortField(field);
@@ -108,15 +108,17 @@ export default function Dashboard({ onLogout }: Props) {
     return new Date(date).toLocaleDateString("ru-RU");
   };
 
-  // стрелка сортировки — переворачивается в зависимости от направления
+  // стрелка сортировки — только визуальный индикатор
   const SortArrow = ({ field }: { field: SortField }) => {
     const isActive = sortField === field;
+
     return (
       <img
         src="/sort_arrow.png"
         alt="сортировка"
-        className={`sort-arrow ${isActive ? "active" : ""} ${isActive && sortDirection === "desc" ? "desc" : ""}`}
-        style={{ marginLeft: 4, width: 12, cursor: "pointer" }}
+        className={`sort-arrow ${isActive ? "active" : ""} ${
+          isActive && sortDirection === "desc" ? "desc" : ""
+        }`}
       />
     );
   };
@@ -125,30 +127,54 @@ export default function Dashboard({ onLogout }: Props) {
     <div className="dashboard">
       {/* пробрасываем onLogout в Header */}
       <Header onLogout={onLogout} />
+
       <main className="content">
         <div className="content-header">
           <h1>{showArchive ? "Архив проектов" : "Проекты в работе"}</h1>
 
           {/* Десктопные фильтры */}
           <div className="filters desktop-only">
-            <button className={!showArchive ? "active" : ""} onClick={() => setShowArchive(false)}>Активные</button>
-            <button className={showArchive ? "active" : ""} onClick={() => setShowArchive(true)}>Архив</button>
+            <button
+              className={!showArchive ? "active" : ""}
+              onClick={() => setShowArchive(false)}
+            >
+              Активные
+            </button>
+            <button
+              className={showArchive ? "active" : ""}
+              onClick={() => setShowArchive(true)}
+            >
+              Архив
+            </button>
           </div>
 
           {/* Мобильные фильтры, ссылка на элемент для закрытия при внешнем клике */}
           <div className="mobile-only" ref={filterRef}>
-            <button className="filter-icon-btn" onClick={() => setFilterOpen((prev) => !prev)}>
+            <button
+              className="filter-icon-btn"
+              onClick={() => setFilterOpen((prev) => !prev)}
+            >
               <img src="/filter.png" alt="Фильтр" />
             </button>
 
             {filterOpen && (
               <div className="filter-dropdown">
-                <button className={!showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(false); setFilterOpen(false); }}>
+                <button
+                  className={!showArchive ? "active" : ""}
+                  onClick={() => {
+                    setShowArchive(false);
+                    setFilterOpen(false);
+                  }}
+                >
                   Активные
                 </button>
-                <button className={showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(true); setFilterOpen(false); }}>
+                <button
+                  className={showArchive ? "active" : ""}
+                  onClick={() => {
+                    setShowArchive(true);
+                    setFilterOpen(false);
+                  }}
+                >
                   Архив
                 </button>
               </div>
@@ -161,38 +187,71 @@ export default function Dashboard({ onLogout }: Props) {
             <thead>
               <tr>
                 {/* заголовки с кликабельной сортировкой */}
-                <th onClick={() => handleSort("name")} style={{ cursor: "pointer" }}>
-                  Наименование <SortArrow field="name" />
+                <th>
+                  <button
+                    type="button"
+                    className="th-sort-btn"
+                    onMouseDown={() => handleSort("name")}
+                  >
+                    Наименование <SortArrow field="name" />
+                  </button>
                 </th>
-                <th onClick={() => handleSort("startDate")} style={{ cursor: "pointer" }}>
-                  Дата начала <SortArrow field="startDate" />
+
+                <th>
+                  <button
+                    type="button"
+                    className="th-sort-btn"
+                    onMouseDown={() => handleSort("startDate")}
+                  >
+                    Дата начала <SortArrow field="startDate" />
+                  </button>
                 </th>
-                <th onClick={() => handleSort("endDate")} style={{ cursor: "pointer" }}>
-                  Дата окончания <SortArrow field="endDate" />
+
+                <th>
+                  <button
+                    type="button"
+                    className="th-sort-btn"
+                    onMouseDown={() => handleSort("endDate")}
+                  >
+                    Дата окончания <SortArrow field="endDate" />
+                  </button>
                 </th>
+
                 <th>Ответственный</th>
                 <th>Статус</th>
                 {showArchive && role === "ADMIN" && <th>Действия</th>}
               </tr>
             </thead>
+
             <tbody>
               {sorted.map((project) => (
                 <tr
                   key={project.id}
                   className={showArchive ? "" : "clickable"}
-                  onClick={() => !showArchive && navigate(`/projects/${project.id}`)}>
+                  onClick={() =>
+                    !showArchive && navigate(`/projects/${project.id}`)
+                  }
+                >
                   <td className="name">{project.name}</td>
                   <td>{formatDate(project.startDate)}</td>
                   <td>{formatDate(project.endDate)}</td>
                   <td>{project.responsible}</td>
                   <td>
-                    <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
+                    <span
+                      className={`status ${
+                        project.status === "В работе" ? "in-progress" : "done"
+                      }`}
+                    >
                       {project.status}
                     </span>
                   </td>
+
                   {showArchive && role === "ADMIN" && (
                     <td>
-                      <span className="status edit" onClick={(e) => handleUnarchive(e, project.id)}>
+                      <span
+                        className="status edit"
+                        onClick={(e) => handleUnarchive(e, project.id)}
+                      >
                         Вернуть
                       </span>
                     </td>
@@ -209,17 +268,25 @@ export default function Dashboard({ onLogout }: Props) {
             <div
               key={project.id}
               className={showArchive ? "" : "project-card clickable"}
-              onClick={() => !showArchive && navigate(`/projects/${project.id}`)}>
-
+              onClick={() =>
+                !showArchive && navigate(`/projects/${project.id}`)
+              }
+            >
               <div className="project-card-header">
                 <div className="project-title">{project.name}</div>
               </div>
 
               <div className="project-info">
                 <div className="project-dates">
-                  {formatDate(project.startDate)} – {formatDate(project.endDate)}
+                  {formatDate(project.startDate)} –{" "}
+                  {formatDate(project.endDate)}
                 </div>
-                <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
+
+                <span
+                  className={`status ${
+                    project.status === "В работе" ? "in-progress" : "done"
+                  }`}
+                >
                   {project.status}
                 </span>
               </div>
@@ -230,7 +297,10 @@ export default function Dashboard({ onLogout }: Props) {
               </div>
 
               {showArchive && role === "ADMIN" && (
-                <span className="status edit" onClick={(e) => handleUnarchive(e, project.id)}>
+                <span
+                  className="status edit"
+                  onClick={(e) => handleUnarchive(e, project.id)}
+                >
                   Вернуть из архива
                 </span>
               )}

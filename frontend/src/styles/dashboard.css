@@ -522,9 +522,19 @@ body {
 }
 
 /*стрелка сотрировки*/
+.th-sort-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .sort-arrow {
-  opacity: 0.3;
-  transition: transform 0.2s, opacity 0.2s;
+  width: 12px;
+  opacity: 0.4;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  pointer-events: none; /* важно: убирает двойные клики */
 }
 
 .sort-arrow.active {
@@ -534,6 +544,7 @@ body {
 .sort-arrow.desc {
   transform: rotate(180deg);
 }
+
 
 
 /* === адаптация === */
