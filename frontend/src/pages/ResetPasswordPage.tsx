@@ -2,13 +2,18 @@ import { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 
 // правила валидации пароля — те же что в AddModal
-const validatePassword = (password: string): string | null => {
-  if (password.length < 8) return "Пароль должен содержать не менее 8 символов";
-  if (!/[A-Z]/.test(password)) return "Пароль должен содержать хотя бы одну заглавную букву";
-  if (!/[a-z]/.test(password)) return "Пароль должен содержать хотя бы одну строчную букву";
-  if (!/[0-9]/.test(password)) return "Пароль должен содержать хотя бы одну цифру";
-  return null;
+const validatePassword = (password: string): boolean => {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password)
+  );
 };
+
+// единое сообщение об ошибке пароля
+const PASSWORD_ERROR =
+  "Пароль должен быть не менее 8 символов и содержать заглавную, строчную латинскую букву и цифру";
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams(); // берём токен из URL (?token=xxx)
@@ -28,15 +33,15 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    // валидация пароля
-    const passwordError = validatePassword(password);
-    if (passwordError) {
-      setError(passwordError);
+    // проверка совпадения паролей
+    if (password !== confirm) {
+      setError("Пароли не совпадают");
       return;
     }
 
-    if (password !== confirm) {
-      setError("Пароли не совпадают");
+    // валидация пароля (единое сообщение)
+    if (!validatePassword(password)) {
+      setError(PASSWORD_ERROR);
       return;
     }
 
@@ -64,7 +69,9 @@ export default function ResetPasswordPage() {
       <div className="page">
         <div className="card">
           <p>Неверная ссылка для восстановления</p>
-          <button className="primary" onClick={() => navigate("/login")}>Ко входу</button>
+          <button className="primary" onClick={() => navigate("/login")}>
+            Ко входу
+          </button>
         </div>
       </div>
     );
@@ -75,7 +82,9 @@ export default function ResetPasswordPage() {
       <div className="page">
         <div className="card">
           <p>Пароль успешно изменён!</p>
-          <button className="primary" onClick={() => navigate("/login")}>Войти</button>
+          <button className="primary" onClick={() => navigate("/login")}>
+            Войти
+          </button>
         </div>
       </div>
     );
@@ -98,7 +107,10 @@ export default function ResetPasswordPage() {
           type="password"
           placeholder="Новый пароль"
           value={password}
-          onChange={(e) => { setPassword(e.target.value); setError(""); }}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            setError("");
+          }}
         />
 
         {/* подсказка с требованиями к паролю */}
@@ -110,13 +122,20 @@ export default function ResetPasswordPage() {
           type="password"
           placeholder="Повторите пароль"
           value={confirm}
-          onChange={(e) => { setConfirm(e.target.value); setError(""); }}
+          onChange={(e) => {
+            setConfirm(e.target.value);
+            setError("");
+          }}
         />
 
         {error && <div className="error">{error}</div>}
 
-        <button className="primary" onClick={handleSubmit}>Сохранить пароль</button>
-        <button className="link" onClick={() => navigate("/login")}>Вернуться ко входу</button>
+        <button className="primary" onClick={handleSubmit}>
+          Сохранить пароль
+        </button>
+        <button className="link" onClick={() => navigate("/login")}>
+          Вернуться ко входу
+        </button>
       </div>
     </div>
   );

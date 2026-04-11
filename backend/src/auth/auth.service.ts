@@ -7,13 +7,18 @@ import * as crypto from 'crypto';
 import { Resend } from 'resend';
 
 // валидация пароля — те же правила что на фронте
-const validatePassword = (password: string): string | null => {
-  if (password.length < 8) return 'Пароль должен содержать не менее 8 символов';
-  if (!/[A-Z]/.test(password)) return 'Пароль должен содержать хотя бы одну заглавную букву';
-  if (!/[a-z]/.test(password)) return 'Пароль должен содержать хотя бы одну строчную букву';
-  if (!/[0-9]/.test(password)) return 'Пароль должен содержать хотя бы одну цифру';
-  return null;
+const validatePassword = (password: string): boolean => {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password)
+  );
 };
+
+// единое сообщение об ошибке пароля
+const PASSWORD_ERROR =
+  'Пароль должен быть не менее 8 символов и содержать заглавную, строчную латинскую букву и цифру';
 
 @Injectable()
 export class AuthService {
@@ -112,9 +117,8 @@ export class AuthService {
   // меняет пароль по токену из письма
   async resetPassword(token: string, newPassword: string): Promise<void> {
     // валидация пароля перед изменением
-    const passwordError = validatePassword(newPassword);
-    if (passwordError) {
-      throw new BadRequestException(passwordError);
+    if (!validatePassword(newPassword)) {
+      throw new BadRequestException(PASSWORD_ERROR);
     }
 
     // ищем токен в БД
