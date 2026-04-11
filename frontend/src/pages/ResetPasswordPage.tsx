@@ -113,11 +113,6 @@ export default function ResetPasswordPage() {
           }}
         />
 
-        {/* подсказка с требованиями к паролю */}
-        <div className="field-hint">
-          Не менее 8 символов, заглавная и строчная латинская буква, цифра
-        </div>
-
         <input
           type="password"
           placeholder="Повторите пароль"

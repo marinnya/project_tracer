@@ -10,6 +10,28 @@ type Props = {
   onSave: (id: number, updatedData: { login?: string; password?: string }) => void;
 };
 
+// правила валидации
+const validateLogin = (login: string): string | null => {
+  if (login.length < 5) return "Логин должен содержать не менее 5 символов";
+  if (!/^[a-zA-Z0-9_]+$/.test(login))
+    return "Логин может содержать только латинские буквы, цифры и _";
+  return null;
+};
+
+// валидация пароля — единое правило
+const validatePassword = (password: string): boolean => {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password)
+  );
+};
+
+// единое сообщение об ошибке пароля
+const PASSWORD_ERROR =
+  "Пароль должен быть не менее 8 символов и содержать заглавную, строчную латинскую букву и цифру";
+
 // Копмонент работает с пропсами: onClose, onSave
 export default function EditModal({ employee, onClose, onSave }: Props) {
   const [login, setLogin] = useState(employee.login ?? "");
@@ -25,12 +47,25 @@ export default function EditModal({ employee, onClose, onSave }: Props) {
       return;
     }
 
+    // валидация логина
+    const loginError = validateLogin(login);
+    if (loginError) {
+      setError(loginError);
+      return;
+    }
+
+    // валидация пароля (если введён)
+    if (password && !validatePassword(password)) {
+      setError(PASSWORD_ERROR);
+      return;
+    }
+
     // Вызываем функцию onSave из EmployeesPage, передаем объект сотрудника с полями
     onSave(employee.id, {
       login,
       password: password || undefined, // если пароль пустой, ничего не меняем
     });
-    
+
     onClose(); // закрываем модалку
   };
 
@@ -57,7 +92,10 @@ export default function EditModal({ employee, onClose, onSave }: Props) {
             <label>Логин</label>
             <input
               value={login}
-              onChange={(e) => setLogin(e.target.value)}
+              onChange={(e) => {
+                setLogin(e.target.value);
+                setError("");
+              }}
             />
           </div>
 
@@ -66,7 +104,10 @@ export default function EditModal({ employee, onClose, onSave }: Props) {
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError("");
+              }}
               placeholder="Новый пароль (если нужно)"
             />
           </div>

@@ -41,6 +41,15 @@ export class UsersService {
     const loginError = validateLogin(data.login);
     if (loginError) throw new BadRequestException(loginError);
 
+    // проверяем что логин не занят
+    const existingLogin = await this.prisma.user.findUnique({
+      where: { login: data.login },
+    });
+
+    if (existingLogin) {
+      throw new BadRequestException('Логин уже занят');
+    }
+
     // валидация пароля
     if (!validatePassword(data.password)) {
       throw new BadRequestException(PASSWORD_ERROR);
@@ -58,6 +67,16 @@ export class UsersService {
 
       if (existingByOneCId) {
         // пользователь уже есть в БД (пришёл из 1С) — обновляем логин и пароль
+
+        // проверяем что логин не занят другим пользователем
+        const existingLogin = await this.prisma.user.findUnique({
+          where: { login: data.login },
+        });
+
+        if (existingLogin && existingLogin.id !== existingByOneCId.id) {
+          throw new BadRequestException('Логин уже занят');
+        }
+
         const user = await this.prisma.user.update({
           where: { oneCId: data.oneCId },
           data: {
@@ -77,15 +96,6 @@ export class UsersService {
 
         return user;
       }
-    }
-
-    // проверяем что логин не занят
-    const existing = await this.prisma.user.findUnique({
-      where: { login: data.login },
-    });
-
-    if (existing) {
-      throw new BadRequestException('Логин уже занят');
     }
 
     // создаём нового пользователя
@@ -172,6 +182,16 @@ export class UsersService {
     if (data.login) {
       const loginError = validateLogin(data.login);
       if (loginError) throw new BadRequestException(loginError);
+
+      // проверяем что логин не занят другим пользователем
+      const existing = await this.prisma.user.findUnique({
+        where: { login: data.login },
+      });
+
+      if (existing && existing.id !== userId) {
+        throw new BadRequestException('Логин уже занят');
+      }
+
       updateData.login = data.login;
     }
 
