@@ -108,14 +108,14 @@ export default function Dashboard({ onLogout }: Props) {
     return new Date(date).toLocaleDateString("ru-RU");
   };
 
-  // стрелка сортировки — переворачивается в зависимости от направления
+  // стрелка вниз = по возрастанию (asc), стрелка вверх = по убыванию (desc)
   const SortArrow = ({ field }: { field: SortField }) => {
     const isActive = sortField === field;
     return (
       <img
         src="/arrow_down.png"
         alt=""
-        className={`arrow ${isActive && sortDirection === "asc" ? "open" : ""}`}
+        className={`arrow ${isActive && sortDirection === "desc" ? "open" : ""}`}
         style={{ marginLeft: 4 }}
       />
     );
