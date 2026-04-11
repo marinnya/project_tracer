@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 
+// правила валидации пароля — те же что в AddModal
+const validatePassword = (password: string): string | null => {
+  if (password.length < 8) return "Пароль должен содержать не менее 8 символов";
+  if (!/[A-Z]/.test(password)) return "Пароль должен содержать хотя бы одну заглавную букву";
+  if (!/[a-z]/.test(password)) return "Пароль должен содержать хотя бы одну строчную букву";
+  if (!/[0-9]/.test(password)) return "Пароль должен содержать хотя бы одну цифру";
+  return null;
+};
+
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams(); // берём токен из URL (?token=xxx)
   const token = searchParams.get("token");
@@ -19,13 +28,15 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (password !== confirm) {
-      setError("Пароли не совпадают");
+    // валидация пароля
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
-    if (password.length < 6) {
-      setError("Пароль должен быть не менее 6 символов");
+    if (password !== confirm) {
+      setError("Пароли не совпадают");
       return;
     }
 
@@ -89,6 +100,11 @@ export default function ResetPasswordPage() {
           value={password}
           onChange={(e) => { setPassword(e.target.value); setError(""); }}
         />
+
+        {/* подсказка с требованиями к паролю */}
+        <div className="field-hint">
+          Не менее 8 символов, заглавная и строчная латинская буква, цифра
+        </div>
 
         <input
           type="password"

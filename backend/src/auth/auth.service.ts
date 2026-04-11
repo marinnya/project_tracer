@@ -1,10 +1,19 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { Resend } from 'resend';
+
+// валидация пароля — те же правила что на фронте
+const validatePassword = (password: string): string | null => {
+  if (password.length < 8) return 'Пароль должен содержать не менее 8 символов';
+  if (!/[A-Z]/.test(password)) return 'Пароль должен содержать хотя бы одну заглавную букву';
+  if (!/[a-z]/.test(password)) return 'Пароль должен содержать хотя бы одну строчную букву';
+  if (!/[0-9]/.test(password)) return 'Пароль должен содержать хотя бы одну цифру';
+  return null;
+};
 
 @Injectable()
 export class AuthService {
@@ -29,7 +38,7 @@ export class AuthService {
     return user;
   }
 
-  async login(user: any) {
+  async login(user: { id: string; role: string; login: string; firstName: string; lastName: string }) {
     const payload = {
       sub: user.id,
       role: user.role,
@@ -49,54 +58,65 @@ export class AuthService {
 
   // отправляет письмо с логином и ссылкой на смену пароля
   async requestPasswordReset(email: string): Promise<void> {
-  const user = await this.prisma.user.findUnique({ where: { email } });
-  
-  console.log('Ищем пользователя по email:', email);
-  console.log('Найден:', user ? user.login : 'не найден');
+    const user = await this.prisma.user.findUnique({ where: { email } });
 
-  if (!user) return;
+    console.log('Ищем пользователя по email:', email);
+    console.log('Найден:', user ? user.login : 'не найден');
 
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    // не сообщаем существует ли email — защита от перебора
+    if (!user) return;
 
-  await this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
-  await this.prisma.passwordResetToken.create({
-    data: { token, userId: user.id, expiresAt },
-  });
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 час
 
-  const resetUrl = `${process.env.APP_URL}/reset-password?token=${token}`;
+    // удаляем старые токены пользователя если были
+    await this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
 
-  console.log('Отправляем письмо на:', email);
-  console.log('Resend API key есть:', !!process.env.RESEND_API_KEY);
-
-  try {
-    const result = await this.resend.emails.send({
-      from: 'Project Tracer <onboarding@resend.dev>',
-      to: email,
-      subject: 'Восстановление доступа — Project Tracer',
-      html: `
-        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-          <h2>Восстановление доступа</h2>
-          <p>Ваш логин для входа: <strong>${user.login}</strong></p>
-          <p>Для смены пароля перейдите по ссылке. Ссылка действительна <strong>1 час</strong>.</p>
-          <a href="${resetUrl}"
-            style="display:inline-block; padding: 12px 24px; background:#1976d2; color:#fff; border-radius:8px; text-decoration:none;">
-            Сменить пароль
-          </a>
-          <p style="color:#999; font-size:12px; margin-top:24px;">
-            Если вы не запрашивали восстановление доступа — просто проигнорируйте это письмо.
-          </p>
-        </div>
-      `,
+    // сохраняем новый токен в БД
+    await this.prisma.passwordResetToken.create({
+      data: { token, userId: user.id, expiresAt },
     });
-    console.log('Resend ответил:', JSON.stringify(result));
-  } catch (e: any) {
-    console.error('Ошибка Resend:', e.message, JSON.stringify(e));
+
+    const resetUrl = `${process.env.APP_URL}/reset-password?token=${token}`;
+
+    console.log('Отправляем письмо на:', email);
+    console.log('Resend API key есть:', !!process.env.RESEND_API_KEY);
+
+    try {
+      const result = await this.resend.emails.send({
+        from: 'Project Tracer <onboarding@resend.dev>',
+        to: email,
+        subject: 'Восстановление доступа — Project Tracer',
+        html: `
+          <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+            <h2>Восстановление доступа</h2>
+            <p>Ваш логин для входа: <strong>${user.login}</strong></p>
+            <p>Для смены пароля перейдите по ссылке. Ссылка действительна <strong>1 час</strong>.</p>
+            <a href="${resetUrl}"
+              style="display:inline-block; padding: 12px 24px; background:#1976d2; color:#fff; border-radius:8px; text-decoration:none;">
+              Сменить пароль
+            </a>
+            <p style="color:#999; font-size:12px; margin-top:24px;">
+              Если вы не запрашивали восстановление доступа — просто проигнорируйте это письмо.
+            </p>
+          </div>
+        `,
+      });
+      console.log('Resend ответил:', JSON.stringify(result));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error('Ошибка Resend:', message);
+    }
   }
-}
 
   // меняет пароль по токену из письма
   async resetPassword(token: string, newPassword: string): Promise<void> {
+    // валидация пароля перед изменением
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      throw new BadRequestException(passwordError);
+    }
+
     // ищем токен в БД
     const resetToken = await this.prisma.passwordResetToken.findUnique({
       where: { token },
