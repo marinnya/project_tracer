@@ -4,7 +4,14 @@ import api from "../utils/api";
 
 type Props = {
   onClose: () => void;
-  onSave: (employee: { firstName: string; lastName: string; login: string; password: string; role: "ADMIN" | "EMPLOYEE"; oneCId: string }) => void;
+  onSave: (employee: {
+    firstName: string;
+    lastName: string;
+    login: string;
+    password: string;
+    role: "ADMIN" | "EMPLOYEE";
+    oneCId: string;
+  }) => void;
 };
 
 type OneCEmployee = {
@@ -16,17 +23,24 @@ type OneCEmployee = {
 // правила валидации
 const validateLogin = (login: string): string | null => {
   if (login.length < 5) return "Логин должен содержать не менее 5 символов";
-  if (!/^[a-zA-Z0-9_]+$/.test(login)) return "Логин может содержать только латинские буквы, цифры и _";
+  if (!/^[a-zA-Z0-9_]+$/.test(login))
+    return "Логин может содержать только латинские буквы, цифры и _";
   return null;
 };
 
-const validatePassword = (password: string): string | null => {
-  if (password.length < 8) return "Пароль должен содержать не менее 8 символов";
-  if (!/[A-Z]/.test(password)) return "Пароль должен содержать хотя бы одну заглавную букву";
-  if (!/[a-z]/.test(password)) return "Пароль должен содержать хотя бы одну строчную букву";
-  if (!/[0-9]/.test(password)) return "Пароль должен содержать хотя бы одну цифру";
-  return null;
+// валидация пароля — единое правило
+const validatePassword = (password: string): boolean => {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password)
+  );
 };
+
+// единое сообщение об ошибке пароля
+const PASSWORD_ERROR =
+  "Пароль должен быть не менее 8 символов и содержать заглавную, строчную латинскую букву и цифру";
 
 export default function AddModal({ onClose, onSave }: Props) {
   const [selectedOneCId, setSelectedOneCId] = useState("");
@@ -37,8 +51,9 @@ export default function AddModal({ onClose, onSave }: Props) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    api.get("/users/onec-employees")
-      .then(res => setEmployees(res.data))
+    api
+      .get("/users/onec-employees")
+      .then((res) => setEmployees(res.data))
       .catch(() => setError("Не удалось загрузить список сотрудников"))
       .finally(() => setIsLoading(false));
   }, []);
@@ -58,10 +73,9 @@ export default function AddModal({ onClose, onSave }: Props) {
       return;
     }
 
-    // валидация пароля
-    const passwordError = validatePassword(password);
-    if (passwordError) {
-      setError(passwordError);
+    // валидация пароля (единое сообщение)
+    if (!validatePassword(password)) {
+      setError(PASSWORD_ERROR);
       return;
     }
 
@@ -79,22 +93,31 @@ export default function AddModal({ onClose, onSave }: Props) {
       role: "EMPLOYEE",
       oneCId: employeeObj.id,
     });
+
     onClose();
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal_edit" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>×</button>
+        <button className="modal-close" onClick={onClose}>
+          ×
+        </button>
+
         <h2>Добавление сотрудника</h2>
 
         <div className="modal-form">
           <div className="form-row">
             <label>Сотрудник</label>
             {isLoading ? (
-              <select disabled><option>Загрузка...</option></select>
+              <select disabled>
+                <option>Загрузка...</option>
+              </select>
             ) : (
-              <select value={selectedOneCId} onChange={(e) => setSelectedOneCId(e.target.value)}>
+              <select
+                value={selectedOneCId}
+                onChange={(e) => setSelectedOneCId(e.target.value)}
+              >
                 <option value="">Выберите сотрудника</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
@@ -109,7 +132,10 @@ export default function AddModal({ onClose, onSave }: Props) {
             <label>Логин</label>
             <input
               value={login}
-              onChange={(e) => { setLogin(e.target.value); setError(""); }}
+              onChange={(e) => {
+                setLogin(e.target.value);
+                setError("");
+              }}
               placeholder="Не менее 5 символов, латиница"
             />
           </div>
@@ -119,14 +145,20 @@ export default function AddModal({ onClose, onSave }: Props) {
             <input
               type="password"
               value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError("");
+              }}
               placeholder="Не менее 8 символов"
             />
           </div>
         </div>
 
         {error && <div className="error">{error}</div>}
-        <button className="btn primary" onClick={handleSubmit}>Добавить</button>
+
+        <button className="btn primary" onClick={handleSubmit}>
+          Добавить
+        </button>
       </div>
     </div>
   );

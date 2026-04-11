@@ -6,17 +6,24 @@ import { Role } from '@prisma/client';
 // правила валидации — дублируем на бэкенде независимо от фронта
 const validateLogin = (login: string): string | null => {
   if (login.length < 5) return 'Логин должен содержать не менее 5 символов';
-  if (!/^[a-zA-Z0-9_]+$/.test(login)) return 'Логин может содержать только латинские буквы, цифры и _';
+  if (!/^[a-zA-Z0-9_]+$/.test(login))
+    return 'Логин может содержать только латинские буквы, цифры и _';
   return null;
 };
 
-const validatePassword = (password: string): string | null => {
-  if (password.length < 8) return 'Пароль должен содержать не менее 8 символов';
-  if (!/[A-Z]/.test(password)) return 'Пароль должен содержать хотя бы одну заглавную букву';
-  if (!/[a-z]/.test(password)) return 'Пароль должен содержать хотя бы одну строчную букву';
-  if (!/[0-9]/.test(password)) return 'Пароль должен содержать хотя бы одну цифру';
-  return null;
+// валидация пароля — единое правило
+const validatePassword = (password: string): boolean => {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password)
+  );
 };
+
+// единое сообщение об ошибке пароля
+const PASSWORD_ERROR =
+  'Пароль должен быть не менее 8 символов и содержать заглавную, строчную латинскую букву и цифру';
 
 @Injectable()
 export class UsersService {
@@ -35,11 +42,13 @@ export class UsersService {
     if (loginError) throw new BadRequestException(loginError);
 
     // валидация пароля
-    const passwordError = validatePassword(data.password);
-    if (passwordError) throw new BadRequestException(passwordError);
+    if (!validatePassword(data.password)) {
+      throw new BadRequestException(PASSWORD_ERROR);
+    }
 
     const hash = await bcrypt.hash(data.password, 10);
-    const roleEnum: Role = data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
+    const roleEnum: Role =
+      data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
 
     // если передан oneCId — ищем существующего пользователя из 1С
     if (data.oneCId) {
@@ -167,8 +176,9 @@ export class UsersService {
     }
 
     if (data.password) {
-      const passwordError = validatePassword(data.password);
-      if (passwordError) throw new BadRequestException(passwordError);
+      if (!validatePassword(data.password)) {
+        throw new BadRequestException(PASSWORD_ERROR);
+      }
       updateData.passwordHash = await bcrypt.hash(data.password, 10);
     }
 
