@@ -3,6 +3,21 @@ import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { Role } from '@prisma/client';
 
+// правила валидации — дублируем на бэкенде независимо от фронта
+const validateLogin = (login: string): string | null => {
+  if (login.length < 5) return 'Логин должен содержать не менее 5 символов';
+  if (!/^[a-zA-Z0-9_]+$/.test(login)) return 'Логин может содержать только латинские буквы, цифры и _';
+  return null;
+};
+
+const validatePassword = (password: string): string | null => {
+  if (password.length < 8) return 'Пароль должен содержать не менее 8 символов';
+  if (!/[A-Z]/.test(password)) return 'Пароль должен содержать хотя бы одну заглавную букву';
+  if (!/[a-z]/.test(password)) return 'Пароль должен содержать хотя бы одну строчную букву';
+  if (!/[0-9]/.test(password)) return 'Пароль должен содержать хотя бы одну цифру';
+  return null;
+};
+
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
@@ -15,10 +30,13 @@ export class UsersService {
     role: string;
     oneCId?: string;
   }) {
+    // валидация логина
+    const loginError = validateLogin(data.login);
+    if (loginError) throw new BadRequestException(loginError);
 
-    console.log('SERVICE CREATE CALLED');
-    console.log('DTO:', data); // ← что пришло с фронта
-
+    // валидация пароля
+    const passwordError = validatePassword(data.password);
+    if (passwordError) throw new BadRequestException(passwordError);
 
     const hash = await bcrypt.hash(data.password, 10);
     const roleEnum: Role = data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
@@ -37,8 +55,8 @@ export class UsersService {
             login: data.login,
             passwordHash: hash,
             role: roleEnum,
-            firstName: data.firstName, // добавить
-            lastName: data.lastName,   // добавить
+            firstName: data.firstName,
+            lastName: data.lastName,
           },
         });
 
@@ -52,13 +70,13 @@ export class UsersService {
       }
     }
 
-    // пользователя с таким oneCId нет — проверяем что логин не занят
+    // проверяем что логин не занят
     const existing = await this.prisma.user.findUnique({
       where: { login: data.login },
     });
 
     if (existing) {
-      throw new BadRequestException('Login already exists');
+      throw new BadRequestException('Логин уже занят');
     }
 
     // создаём нового пользователя
@@ -69,7 +87,7 @@ export class UsersService {
         login: data.login,
         passwordHash: hash,
         role: roleEnum,
-        oneCId: data.oneCId ?? null, // ID сотрудника в 1С — для связи с проектами
+        oneCId: data.oneCId ?? null,
       },
     });
 
@@ -106,7 +124,6 @@ export class UsersService {
 
   async changePassword(userId: string, newPassword: string) {
     const hash = await bcrypt.hash(newPassword, 10);
-
     return this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash: hash },
@@ -143,8 +160,17 @@ export class UsersService {
   async updateUser(userId: string, data: { login?: string; password?: string }) {
     const updateData: Partial<{ login: string; passwordHash: string }> = {};
 
-    if (data.login) updateData.login = data.login;
-    if (data.password) updateData.passwordHash = await bcrypt.hash(data.password, 10);
+    if (data.login) {
+      const loginError = validateLogin(data.login);
+      if (loginError) throw new BadRequestException(loginError);
+      updateData.login = data.login;
+    }
+
+    if (data.password) {
+      const passwordError = validatePassword(data.password);
+      if (passwordError) throw new BadRequestException(passwordError);
+      updateData.passwordHash = await bcrypt.hash(data.password, 10);
+    }
 
     return this.prisma.user.update({
       where: { id: userId },

@@ -2,28 +2,39 @@ import { useState, useEffect } from "react";
 import "../styles/successModal.css";
 import api from "../utils/api";
 
-// Типы для пропсов
 type Props = {
   onClose: () => void;
-  // добавлен oneCId — нужен для связи сотрудника с проектами из 1С
   onSave: (employee: { firstName: string; lastName: string; login: string; password: string; role: "ADMIN" | "EMPLOYEE"; oneCId: string }) => void;
 };
 
-// тип сотрудника из 1С
 type OneCEmployee = {
-  id: string;       // oneCId — уникальный идентификатор в 1С
+  id: string;
   firstName: string;
   lastName: string;
 };
 
+// правила валидации
+const validateLogin = (login: string): string | null => {
+  if (login.length < 5) return "Логин должен содержать не менее 5 символов";
+  if (!/^[a-zA-Z0-9_]+$/.test(login)) return "Логин может содержать только латинские буквы, цифры и _";
+  return null;
+};
+
+const validatePassword = (password: string): string | null => {
+  if (password.length < 8) return "Пароль должен содержать не менее 8 символов";
+  if (!/[A-Z]/.test(password)) return "Пароль должен содержать хотя бы одну заглавную букву";
+  if (!/[a-z]/.test(password)) return "Пароль должен содержать хотя бы одну строчную букву";
+  if (!/[0-9]/.test(password)) return "Пароль должен содержать хотя бы одну цифру";
+  return null;
+};
+
 export default function AddModal({ onClose, onSave }: Props) {
-  const [selectedOneCId, setSelectedOneCId] = useState(""); // выбранный сотрудник из 1С
+  const [selectedOneCId, setSelectedOneCId] = useState("");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [employees, setEmployees] = useState<OneCEmployee[]>([]); // список сотрудников из 1С
-  const [isLoading, setIsLoading] = useState(true); // загружаются ли сотрудники
-
+  const [employees, setEmployees] = useState<OneCEmployee[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     api.get("/users/onec-employees")
@@ -32,31 +43,41 @@ export default function AddModal({ onClose, onSave }: Props) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  // функция проверяет заполнение полей
   const handleSubmit = () => {
     setError("");
 
-    if (!login || !password || !selectedOneCId) {
-      setError("Заполните все поля");
+    if (!selectedOneCId) {
+      setError("Выберите сотрудника из списка");
       return;
     }
 
-    // находим выбранного сотрудника по oneCId
+    // валидация логина
+    const loginError = validateLogin(login);
+    if (loginError) {
+      setError(loginError);
+      return;
+    }
+
+    // валидация пароля
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
+
     const employeeObj = employees.find((e) => e.id === selectedOneCId);
     if (!employeeObj) {
       setError("Выберите сотрудника из списка");
       return;
     }
 
-    // передаём данные в родительский компонент для сохранения
     onSave({
-      //id: employeeObj.id, // UUID из БД
       firstName: employeeObj.firstName,
       lastName: employeeObj.lastName,
       login,
       password,
-      role: "EMPLOYEE", // новые пользователи всегда сотрудники
-      oneCId: employeeObj.id, // передаём oneCId для связи с проектами
+      role: "EMPLOYEE",
+      oneCId: employeeObj.id,
     });
     onClose();
   };
@@ -75,7 +96,6 @@ export default function AddModal({ onClose, onSave }: Props) {
             ) : (
               <select value={selectedOneCId} onChange={(e) => setSelectedOneCId(e.target.value)}>
                 <option value="">Выберите сотрудника</option>
-                {/* список сотрудников из 1С */}
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
                     {emp.firstName} {emp.lastName}
@@ -87,12 +107,21 @@ export default function AddModal({ onClose, onSave }: Props) {
 
           <div className="form-row">
             <label>Логин</label>
-            <input value={login} onChange={(e) => setLogin(e.target.value)} />
+            <input
+              value={login}
+              onChange={(e) => { setLogin(e.target.value); setError(""); }}
+              placeholder="Не менее 5 символов, латиница"
+            />
           </div>
 
           <div className="form-row">
             <label>Пароль</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              placeholder="Не менее 8 символов"
+            />
           </div>
         </div>
 
