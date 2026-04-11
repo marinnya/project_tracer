@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import "../styles/dashboard.css";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
@@ -31,33 +31,35 @@ export default function Dashboard({ onLogout }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const role = localStorage.getItem("role");
 
-  // состояние сортировки — поле и направление
+  // состояние сортировки — изначально по наименованию по возрастанию
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const filterRef = useRef<HTMLDivElement>(null);
   useClickOutside(filterRef as React.RefObject<HTMLElement>, () => setFilterOpen(false));
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const res = await api.get("/projects");
       setProjects(res.data);
     } catch (err) {
       console.error(err);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [fetchProjects]);
 
   // при клике на заголовок колонки — меняем поле или переключаем направление
   const handleSort = (field: SortField) => {
     if (sortField === field) {
+      // то же поле — переключаем направление
       setSortDirection(prev => prev === "asc" ? "desc" : "asc");
     } else {
+      // новое поле — сортируем по возрастанию сразу
       setSortField(field);
-      setSortDirection("desc"); // при первом клике на новое поле — сразу desc
+      setSortDirection("asc");
     }
   };
 
@@ -106,7 +108,7 @@ export default function Dashboard({ onLogout }: Props) {
     return new Date(date).toLocaleDateString("ru-RU");
   };
 
-  // стрелка сортировки — только визуальный индикатор
+  // стрелка сортировки — переворачивается в зависимости от направления
   const SortArrow = ({ field }: { field: SortField }) => {
     const isActive = sortField === field;
     return (
@@ -157,19 +159,13 @@ export default function Dashboard({ onLogout }: Props) {
               <div className="filter-dropdown">
                 <button
                   className={!showArchive ? "active" : ""}
-                  onClick={() => {
-                    setShowArchive(false);
-                    setFilterOpen(false);
-                  }}
+                  onClick={() => { setShowArchive(false); setFilterOpen(false); }}
                 >
                   Активные
                 </button>
                 <button
                   className={showArchive ? "active" : ""}
-                  onClick={() => {
-                    setShowArchive(true);
-                    setFilterOpen(false);
-                  }}
+                  onClick={() => { setShowArchive(true); setFilterOpen(false); }}
                 >
                   Архив
                 </button>
@@ -187,32 +183,29 @@ export default function Dashboard({ onLogout }: Props) {
                   <button
                     type="button"
                     className="th-sort-btn"
-                    onMouseDown={() => handleSort("name")}
+                    onClick={() => handleSort("name")}
                   >
                     Наименование <SortArrow field="name" />
                   </button>
                 </th>
-
                 <th>
                   <button
                     type="button"
                     className="th-sort-btn"
-                    onMouseDown={() => handleSort("startDate")}
+                    onClick={() => handleSort("startDate")}
                   >
                     Дата начала <SortArrow field="startDate" />
                   </button>
                 </th>
-
                 <th>
                   <button
                     type="button"
                     className="th-sort-btn"
-                    onMouseDown={() => handleSort("endDate")}
+                    onClick={() => handleSort("endDate")}
                   >
                     Дата окончания <SortArrow field="endDate" />
                   </button>
                 </th>
-
                 <th>Ответственный</th>
                 <th>Статус</th>
                 {showArchive && role === "ADMIN" && <th>Действия</th>}
@@ -224,24 +217,17 @@ export default function Dashboard({ onLogout }: Props) {
                 <tr
                   key={project.id}
                   className={showArchive ? "" : "clickable"}
-                  onClick={() =>
-                    !showArchive && navigate(`/projects/${project.id}`)
-                  }
+                  onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
                 >
                   <td className="name">{project.name}</td>
                   <td>{formatDate(project.startDate)}</td>
                   <td>{formatDate(project.endDate)}</td>
                   <td>{project.responsible}</td>
                   <td>
-                    <span
-                      className={`status ${
-                        project.status === "В работе" ? "in-progress" : "done"
-                      }`}
-                    >
+                    <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
                       {project.status}
                     </span>
                   </td>
-
                   {showArchive && role === "ADMIN" && (
                     <td>
                       <span
@@ -264,9 +250,7 @@ export default function Dashboard({ onLogout }: Props) {
             <div
               key={project.id}
               className={showArchive ? "" : "project-card clickable"}
-              onClick={() =>
-                !showArchive && navigate(`/projects/${project.id}`)
-              }
+              onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
             >
               <div className="project-card-header">
                 <div className="project-title">{project.name}</div>
@@ -274,15 +258,9 @@ export default function Dashboard({ onLogout }: Props) {
 
               <div className="project-info">
                 <div className="project-dates">
-                  {formatDate(project.startDate)} –{" "}
-                  {formatDate(project.endDate)}
+                  {formatDate(project.startDate)} – {formatDate(project.endDate)}
                 </div>
-
-                <span
-                  className={`status ${
-                    project.status === "В работе" ? "in-progress" : "done"
-                  }`}
-                >
+                <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
                   {project.status}
                 </span>
               </div>
