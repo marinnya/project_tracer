@@ -85,6 +85,7 @@ export default function EmployeesPage({ onLogout }: Props) {
       await fetchEmployees(); // после успешного добавления заново загружаем список сотрудников
     } catch (err) {
       console.error(err);
+      throw err; // 🔥 пробрасываем ошибку в AddModal
     }
   };
 
@@ -95,6 +96,7 @@ export default function EmployeesPage({ onLogout }: Props) {
       await fetchEmployees(); // снова загружаем список сотрудников
     } catch (err) {
       console.error(err);
+      throw err; // 🔥 ВАЖНО: пробрасываем ошибку в EditModal
     }
   };
 

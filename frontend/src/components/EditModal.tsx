@@ -7,7 +7,7 @@ type Props = {
   employee: Employee;
   onClose: () => void;
   // функция вызывается при редактировании данных сотрудника, работает с этими полями, ничего не возвращает (void)
-  onSave: (id: number, updatedData: { login?: string; password?: string }) => void;
+  onSave: (id: number, updatedData: { login?: string; password?: string }) => Promise<void>;
 };
 
 // правила валидации
@@ -39,7 +39,7 @@ export default function EditModal({ employee, onClose, onSave }: Props) {
   const [error, setError] = useState("");
 
   // функция проверяет заполнение полей
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setError("");
 
     if (!login) {
@@ -60,13 +60,18 @@ export default function EditModal({ employee, onClose, onSave }: Props) {
       return;
     }
 
-    // Вызываем функцию onSave из EmployeesPage, передаем объект сотрудника с полями
-    onSave(employee.id, {
-      login,
-      password: password || undefined, // если пароль пустой, ничего не меняем
-    });
+    try {
+      // Вызываем функцию onSave из EmployeesPage, передаем объект сотрудника с полями
+      await onSave(employee.id, {
+        login,
+        password: password || undefined, // если пароль пустой, ничего не меняем
+      });
 
-    onClose(); // закрываем модалку
+      onClose(); // закрываем модалку ТОЛЬКО если всё успешно
+    } catch (err: any) {
+      // показываем ошибку от бэка (например "Логин уже занят")
+      setError(err.response?.data?.message || "Ошибка при сохранении");
+    }
   };
 
   return (
