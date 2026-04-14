@@ -109,25 +109,19 @@ export default function Dashboard({ onLogout }: Props) {
   };
 
   // стрелка вниз = по возрастанию (asc), стрелка вверх = по убыванию (desc)
-  const SortArrow = ({
-    active,
-    direction,
-  }: {
-    active: boolean;
-    direction: SortDirection;
-  }) => {
+  const SortArrow = ({ field }: { field: SortField }) => {
+    const isActive = sortField === field;
+
     return (
       <img
         src="/arrow_down.png"
         alt=""
-        className={`arrow ${active && direction === "desc" ? "open" : ""}`}
-        /*className={`arrow ${sortDirection === "desc" ? "open" : ""}`}*/
+        className={`arrow ${sortDirection === "desc" && isActive ? "open" : ""}`}
         style={{ marginLeft: 4 }}
       />
     );
   };
     
-
   return (
     <div className="dashboard">
       {/* пробрасываем onLogout в Header */}
