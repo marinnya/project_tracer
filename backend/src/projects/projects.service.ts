@@ -94,6 +94,8 @@ export class ProjectsService {
         defectType: p.defectType,
         originalName: p.originalName,
         order: p.order,
+        filename: null,
+        yandexPath: null,
       })),
     });
   }
