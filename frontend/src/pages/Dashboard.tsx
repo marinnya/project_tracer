@@ -109,17 +109,23 @@ export default function Dashboard({ onLogout }: Props) {
   };
 
   // стрелка вниз = по возрастанию (asc), стрелка вверх = по убыванию (desc)
-  const SortArrow = ({ field }: { field: SortField }) => {
-    const isActive = sortField === field;
+  const SortArrow = ({
+    active,
+    direction,
+  }: {
+    active: boolean;
+    direction: SortDirection;
+  }) => {
     return (
       <img
         src="/arrow_down.png"
         alt=""
-        className={`arrow ${isActive && sortDirection === "desc" ? "open" : ""}`}
+        className={`arrow ${active && direction === "desc" ? "open" : ""}`}
         style={{ marginLeft: 4 }}
       />
     );
   };
+    
 
   return (
     <div className="dashboard">
@@ -185,7 +191,7 @@ export default function Dashboard({ onLogout }: Props) {
                     className="th-sort-btn"
                     onClick={() => handleSort("name")}
                   >
-                    Наименование <SortArrow field="name" />
+                    Наименование <SortArrow active={sortField === "name"} direction={sortDirection}/>
                   </button>
                 </th>
                 <th>
@@ -194,7 +200,7 @@ export default function Dashboard({ onLogout }: Props) {
                     className="th-sort-btn"
                     onClick={() => handleSort("startDate")}
                   >
-                    Дата начала <SortArrow field="startDate" />
+                    Дата начала <SortArrow active={sortField === "startDate"} direction={sortDirection} />
                   </button>
                 </th>
                 <th>
@@ -203,7 +209,7 @@ export default function Dashboard({ onLogout }: Props) {
                     className="th-sort-btn"
                     onClick={() => handleSort("endDate")}
                   >
-                    Дата окончания <SortArrow field="endDate" />
+                    Дата окончания <SortArrow active={sortField === "endDate"} direction={sortDirection} />
                   </button>
                 </th>
                 <th>Ответственный</th>
