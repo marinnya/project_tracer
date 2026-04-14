@@ -24,6 +24,10 @@ type Props = {
   onLogout: () => void;
 };
 
+// поля по которым можно сортировать
+type SortField = "name";
+type SortDirection = "asc" | "desc";
+
 export default function EmployeesPage({ onLogout }: Props) {
   const [showArchive, setShowArchive] = useState(false); // состояние для заблокированных сотрудников
   const [showModalAdd, setShowModalAdd] = useState(false); // состояние для модального окна добавления
@@ -34,18 +38,40 @@ export default function EmployeesPage({ onLogout }: Props) {
   const [filterOpen, setFilterOpen] = useState(false); // состояние для окна фильтров (мобильное)
   const [employees, setEmployees] = useState<EmployeeData[]>([]); // состояние для загрузки сотрудников на страницу
 
+  // сортировка
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
   // useRef - хук, который создаёт ссылку на DOM-элемент
   const filterRef = useRef<HTMLDivElement>(null);
   // пользовательский хук, который реагирует на клики вне указанного элемента
   useClickOutside(filterRef as React.RefObject<HTMLElement>, () => setFilterOpen(false));
 
-  // если выбран архив, показываем только заблокированных
+  // если выбран архив, показываем только заблокированных сотрудников
   const filteredEmployees = employees.filter(emp =>
     showArchive ? emp.isBlocked : !emp.isBlocked
   );
 
+  // сортировка сотрудников
+  const sortEmployees = (list: EmployeeData[]) => {
+    return [...list].sort((a, b) => {
+      let valA = "";
+      let valB = "";
+
+      if (sortField === "name") {
+        valA = `${a.lastName} ${a.firstName}`.toLowerCase();
+        valB = `${b.lastName} ${b.firstName}`.toLowerCase();
+      }
+
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const sortedEmployees = sortEmployees(filteredEmployees);
+
   // асинхронная функция для получения сотрудников
-  // асинхронная функция для получения сотрудников — используется после добавления/редактирования/удаления
   const fetchEmployees = useCallback(async () => {
     try {
       const res = await api.get<EmployeeData[]>("/users");
@@ -60,47 +86,64 @@ export default function EmployeesPage({ onLogout }: Props) {
     fetchEmployees();
   }, [fetchEmployees]);
 
-  // редактирование; функция принимает объект сотрудника и сохраняет его в состояние
+  // сортировка при клике
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // редактирование
   const openEditModal = (emp: Employee) => {
-    setSelectedEmployee(emp); // всегда кладём того, по кому кликнули
-    setShowModalEdit(true); // открываем модальное окно
+    setSelectedEmployee(emp);
+    setShowModalEdit(true);
   };
 
   // блокировка
   const openBlockModal = (emp: Employee) => {
-    setSelectedEmployee(emp); // всегда кладём того, по кому кликнули
+    setSelectedEmployee(emp);
     setShowModalBlock(true);
   };
 
   // удаление
   const openDeleteModal = (emp: Employee) => {
-    setSelectedEmployee(emp); // всегда кладём того, по кому кликнули
+    setSelectedEmployee(emp);
     setShowModalDelete(true);
   };
 
-  // Асинхронная функция для добавления: принимает объект нового сотрудника
-  const addEmployee = async (newEmployee: { firstName: string; lastName: string; login: string; password: string; role: string; oneCId: string }) => {
+  // добавление сотрудника
+  const addEmployee = async (newEmployee: {
+    firstName: string;
+    lastName: string;
+    login: string;
+    password: string;
+    role: string;
+    oneCId: string;
+  }) => {
     try {
-      await api.post("/users/", newEmployee); // токен подставляется автоматически
-      await fetchEmployees(); // после успешного добавления заново загружаем список сотрудников
+      await api.post("/users/", newEmployee);
+      await fetchEmployees();
     } catch (err) {
       console.error(err);
-      throw err; // 🔥 пробрасываем ошибку в AddModal
+      throw err;
     }
   };
 
-  // Асинхронная функция для редактирования: принимает id сотрудника и измененные поля (можно не все)
+  // редактирование сотрудника
   const editEmployee = async (id: number, updatedData: Partial<EmployeeData>) => {
     try {
-      await api.patch(`/users/${id}`, updatedData); // отправляем только измененные поля
-      await fetchEmployees(); // снова загружаем список сотрудников
+      await api.patch(`/users/${id}`, updatedData);
+      await fetchEmployees();
     } catch (err) {
       console.error(err);
-      throw err; // 🔥 ВАЖНО: пробрасываем ошибку в EditModal
+      throw err;
     }
   };
 
-  // Асинхронная функция для блокировки/разблокировки: принимает id сотрудника и block
+  // блокировка/разблокировка
   const toggleBlockEmployee = async (id: number, block: boolean) => {
     try {
       await api.patch(`/users/${id}/block`, { value: block });
@@ -110,7 +153,7 @@ export default function EmployeesPage({ onLogout }: Props) {
     }
   };
 
-  // Асинхронная функция для удаления: принимает id сотрудника
+  // удаление
   const deleteEmployee = async (id: number) => {
     try {
       await api.delete(`/users/${id}`);
@@ -124,17 +167,16 @@ export default function EmployeesPage({ onLogout }: Props) {
     <div className="dashboard">
       {/* пробрасываем onLogout в Header */}
       <Header onLogout={onLogout} />
+
       <main className="content">
         <div className="content-header">
           <div className="header-title">
             <h1>Сотрудники</h1>
-            {/* Мобильная кнопка */}
-            <button className="add-icon-btn mobile-only" onClick={() => setShowModalAdd(true)} aria-label="Добавить сотрудника">
+            <button className="add-icon-btn mobile-only" onClick={() => setShowModalAdd(true)}>
               <img src="/add_circle.png" alt="" />
             </button>
           </div>
 
-          {/* Десктопная кнопка */}
           <div className="header-actions desktop-only">
             <button className="add-btn" onClick={() => setShowModalAdd(true)}>
               <img src="/add_circle.png" alt="" />
@@ -142,16 +184,19 @@ export default function EmployeesPage({ onLogout }: Props) {
             </button>
           </div>
 
-          {/* AddModal - дочерний компонент, передаем ему 2 пропса: onClose и onSave для добавления сотрудника */}
-          {showModalAdd && (<AddModal onClose={() => setShowModalAdd(false)} onSave={addEmployee} />)}
+          {showModalAdd && (
+            <AddModal onClose={() => setShowModalAdd(false)} onSave={addEmployee} />
+          )}
 
-          {/* Десктопные фильтры */}
           <div className="filters desktop-only">
-            <button className={!showArchive ? "active" : ""} onClick={() => setShowArchive(false)}>Активные</button>
-            <button className={showArchive ? "active" : ""} onClick={() => setShowArchive(true)}>Заблокированные</button>
+            <button className={!showArchive ? "active" : ""} onClick={() => setShowArchive(false)}>
+              Активные
+            </button>
+            <button className={showArchive ? "active" : ""} onClick={() => setShowArchive(true)}>
+              Заблокированные
+            </button>
           </div>
 
-          {/* Мобильные фильтры, ссылка на элемент для закрытия при внешнем клике */}
           <div className="mobile-only" ref={filterRef}>
             <button className="filter-icon-btn" onClick={() => setFilterOpen((prev) => !prev)}>
               <img src="/filter.png" alt="Фильтр" />
@@ -159,12 +204,16 @@ export default function EmployeesPage({ onLogout }: Props) {
 
             {filterOpen && (
               <div className="filter-dropdown">
-                <button className={!showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(false); setFilterOpen(false); }}>
+                <button
+                  className={!showArchive ? "active" : ""}
+                  onClick={() => { setShowArchive(false); setFilterOpen(false); }}
+                >
                   Активные
                 </button>
-                <button className={showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(true); setFilterOpen(false); }}>
+                <button
+                  className={showArchive ? "active" : ""}
+                  onClick={() => { setShowArchive(true); setFilterOpen(false); }}
+                >
                   Заблокированные
                 </button>
               </div>
@@ -176,22 +225,39 @@ export default function EmployeesPage({ onLogout }: Props) {
           <table className="projects-table">
             <thead>
               <tr>
-                <th>Фамилия Имя</th>
+                <th>
+                  <button type="button" className="th-sort-btn" onClick={() => handleSort("name")}>
+                    Фамилия Имя
+                    <img
+                      src="/arrow_down.png"
+                      alt=""
+                      className={`arrow ${sortDirection === "desc" ? "open" : ""}`}
+                      style={{ marginLeft: 4 }}
+                    />
+                  </button>
+                </th>
                 <th>Логин</th>
                 <th>Статус</th>
                 <th>Действия</th>
               </tr>
             </thead>
+
             <tbody>
-              {filteredEmployees.map((employee) => (
+              {sortedEmployees.map((employee) => (
                 <tr key={employee.id}>
-                  <td className="name">{employee.firstName} {employee.lastName}</td>
+                  <td className="name">{employee.lastName} {employee.firstName}</td>
                   <td>{employee.login}</td>
                   <td>{employee.isBlocked ? "Заблокирован" : "Активен"}</td>
                   <td className="status-actions">
-                    <span className="status edit" onClick={(e) => { e.stopPropagation(); openEditModal(employee as unknown as Employee); }}>Редактировать</span>
-                    <span className="status block" onClick={(e) => { e.stopPropagation(); openBlockModal(employee as unknown as Employee); }}>{employee.isBlocked ? "Разблокировать" : "Блокировать"}</span>
-                    <span className="status delete" onClick={(e) => { e.stopPropagation(); openDeleteModal(employee as unknown as Employee); }}>Удалить</span>
+                    <span className="status edit" onClick={(e) => { e.stopPropagation(); openEditModal(employee as unknown as Employee); }}>
+                      Редактировать
+                    </span>
+                    <span className="status block" onClick={(e) => { e.stopPropagation(); openBlockModal(employee as unknown as Employee); }}>
+                      {employee.isBlocked ? "Разблокировать" : "Блокировать"}
+                    </span>
+                    <span className="status delete" onClick={(e) => { e.stopPropagation(); openDeleteModal(employee as unknown as Employee); }}>
+                      Удалить
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -199,15 +265,18 @@ export default function EmployeesPage({ onLogout }: Props) {
           </table>
         </div>
 
-        {/* Мобильная версия */}
         <div className="employees-mobile">
-          {employees.map(employee => (
+          {filteredEmployees.map(employee => (
             <div key={employee.id} className="employee-card">
               <div className="employee-info">
-                <div className="employee-name">{employee.firstName} {employee.lastName}</div>
+                <div className="employee-name">
+                  {employee.lastName} {employee.firstName}
+                </div>
                 <div className="employee-credentials">
                   <div className="employee-login">{employee.login}</div>
-                  <div className="employee-login">{employee.isBlocked ? "заблокирован" : "активен"}</div>
+                  <div className="employee-login">
+                    {employee.isBlocked ? "заблокирован" : "активен"}
+                  </div>
                 </div>
               </div>
 
@@ -220,10 +289,17 @@ export default function EmployeesPage({ onLogout }: Props) {
           ))}
         </div>
 
-        {/* Модальные окна - дочерние компоненты, передаем им 3 пропса: employee, onClose и соответствующий колбэк */}
-        {showModalEdit && selectedEmployee && (<EditModal employee={selectedEmployee} onClose={() => setShowModalEdit(false)} onSave={editEmployee} />)}
-        {showModalBlock && selectedEmployee && (<BlockModal employee={selectedEmployee} onClose={() => setShowModalBlock(false)} onBlock={toggleBlockEmployee} />)}
-        {showModalDelete && selectedEmployee && (<DeleteModal employee={selectedEmployee} onClose={() => setShowModalDelete(false)} onDelete={deleteEmployee} />)}
+        {showModalEdit && selectedEmployee && (
+          <EditModal employee={selectedEmployee} onClose={() => setShowModalEdit(false)} onSave={editEmployee} />
+        )}
+
+        {showModalBlock && selectedEmployee && (
+          <BlockModal employee={selectedEmployee} onClose={() => setShowModalBlock(false)} onBlock={toggleBlockEmployee} />
+        )}
+
+        {showModalDelete && selectedEmployee && (
+          <DeleteModal employee={selectedEmployee} onClose={() => setShowModalDelete(false)} onDelete={deleteEmployee} />
+        )}
 
       </main>
     </div>
