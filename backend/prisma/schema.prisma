@@ -57,8 +57,8 @@ model ProjectPhoto {
   section      String   // название секции
   defectType   String?  // только для дефектов
   originalName String   // исходное имя файла — для отображения пользователю
-  filename String @default("")
-  yandexPath String @default("")
+  filename     String?  // переименованное имя — заполняется после загрузки на Яндекс.Диск
+  yandexPath   String?  // полный путь на Яндекс.Диске — заполняется после загрузки
   order        Int      // порядковый номер внутри секции
   createdAt    DateTime @default(now())
 
