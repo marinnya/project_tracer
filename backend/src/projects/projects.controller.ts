@@ -28,26 +28,23 @@ export class ProjectsController {
 
   constructor(private readonly projectService: ProjectsService) {}
 
-  // получить сохранённые фото проекта — для отображения на странице проекта
+  // ✅ получить фото проекта
   @Get(':id/photos')
   async getPhotos(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getProjectPhotos(projectId);
   }
 
-  // кнопка "Сохранить" — принимает файлы и сохраняет во временную папку на сервере
+  // ✅ Сохранить (черновик)
   @Patch(':id/save')
   @UseInterceptors(FilesInterceptor('files', 200, {
     storage: diskStorage({
-      // временная папка: uploads/tmp/<projectId>/
       destination: (req, file, cb) => {
         const projectId = String(req.params.id);
         const uploadPath = path.join(process.cwd(), 'uploads', 'tmp', projectId);
 
-        // создаём папку если не существует
         fs.mkdirSync(uploadPath, { recursive: true });
         cb(null, uploadPath);
       },
-      // сохраняем файл под оригинальным именем
       filename: (req, file, cb) => {
         const filename = Buffer.from(file.originalname, 'latin1').toString('utf8');
         cb(null, filename);
@@ -60,12 +57,10 @@ export class ProjectsController {
     @Body() body: { sections: string; photos: string },
   ) {
     this.logger.log(`Сохранение черновика. projectId: ${projectId}`);
-    this.logger.log(`Файлов получено: ${files?.length ?? 0}`);
 
-    const sections = JSON.parse(body.sections) as Record<string, { pages: number }>;
+    const sections = JSON.parse(body.sections);
     await this.projectService.saveDraft(projectId, sections);
 
-    // обновлено: теперь используем originalName
     if (files?.length && body.photos) {
       const photos = JSON.parse(body.photos) as {
         section: string;
@@ -75,21 +70,17 @@ export class ProjectsController {
       }[];
 
       await this.projectService.saveTempPhotos(projectId, photos);
-      this.logger.log(`Метаданные временных файлов сохранены в БД`);
     }
 
     return { message: 'Черновик сохранён' };
   }
 
-  // кнопка "Записать" — читает файлы из временной папки и загружает на Яндекс.Диск
+  // ✅ Загрузка на Яндекс
   @Post(':id/upload')
   async uploadFiles(
     @Param('id', ParseIntPipe) projectId: number,
     @Body() body: { projectName: string; photos: string },
   ) {
-    this.logger.log(`Получен запрос на загрузку. projectId: ${projectId}`);
-    this.logger.log(`projectName: ${body?.projectName}`);
-
     try {
       const photos = JSON.parse(body.photos) as {
         section: string;
@@ -101,7 +92,6 @@ export class ProjectsController {
       const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
 
       const files = await this.projectService.readTempFiles(tmpDir, photos);
-      this.logger.log(`Файлов прочитано из временной папки: ${files.length}`);
 
       const { folderUrl, renamedPhotos } =
         await this.projectService.uploadToYandex(
@@ -130,7 +120,7 @@ export class ProjectsController {
 
       return { message: 'Файлы загружены', folderUrl };
     } catch (e: any) {
-      this.logger.error(`Ошибка: ${e.message}`);
+      this.logger.error(e.message);
       throw e;
     }
   }
