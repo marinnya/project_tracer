@@ -6,7 +6,6 @@ import Header from "../components/Header";
 import { useNavigate } from "react-router-dom";
 import SuccessModal from "../components/SuccessModal";
 import { useParams } from "react-router-dom";
-import { renameSection, renameDefect } from "../utils/fileRename";
 import api from "../utils/api";
 
 // Типы
@@ -32,12 +31,19 @@ type Defect = {
   files: File[];
 };
 
-// пропс onLogout передаётся из App.tsx и пробрасывается в Header
+// тип сохранённого фото из БД — для отображения ранее загруженных файлов
+type SavedPhoto = {
+  id: number;
+  section: string;
+  defectType?: string;
+  originalName: string;
+  order: number;
+};
+
 type Props = {
   onLogout: () => void;
 };
 
-// Список секций — порядок важен, используется и для рендера и для переименования файлов
 const SECTIONS = [
   "Титульный лист",
   "Технические данные объекта контроля",
@@ -49,54 +55,54 @@ const SECTIONS = [
   "Дополнительная информация",
 ] as const;
 
-// вспомогательная функция для форматирования даты под input
 const formatDateForInput = (date: string | null) => {
   if (!date) return "";
-  return new Date(date).toISOString().split("T")[0]; // берём только "2025-12-12"
+  return new Date(date).toISOString().split("T")[0];
 };
 
-
 function ProjectPage({ onLogout }: Props) {
+  const [completed, setCompleted] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const navigate = useNavigate();
 
-  const [completed, setCompleted] = useState(false); // хук: проект окончен?
-  const [showModal, setShowModal] = useState(false); // хук для успешного модального окна при записи проекта
-  const [error, setError] = useState<string | null>(null); // хук для ошибки валидации
-  const [isUploading, setIsUploading] = useState(false); // хук: идёт ли загрузка на Яндекс.Диск
-  const [isSaving, setIsSaving] = useState(false); // хук: идёт ли сохранение черновика
-  const [uploadProgress, setUploadProgress] = useState(0); // хук: прогресс загрузки 0-100
-  const navigate = useNavigate(); // хук из react-router-dom, который позволяет программно менять маршрут
+  const { id } = useParams();
+  const [project, setProject] = useState<Project | null>(null);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
-  const { id } = useParams(); // хук из react-router-dom, который берет параметры маршрута из URL
-  const [project, setProject] = useState<Project | null>(null); // состояние для текущего проекта
-  const [startDate, setStartDate] = useState(""); // состояние для даты начала
-  const [endDate, setEndDate] = useState(""); // состояние для даты окончания
+  // сохранённые фото из БД — для отображения ранее загруженных файлов
+  const [savedPhotos, setSavedPhotos] = useState<SavedPhoto[]>([]);
 
-  // состояние всех обычных секций — объект, где ключ = название секции
   const [sections, setSections] = useState<Record<string, SectionState>>(
     Object.fromEntries(SECTIONS.map(s => [s, { files: [], pages: 0 }]))
   );
 
-  // состояние дефектов — массив объектов, начинаем с одного пустого
   const [defects, setDefects] = useState<Defect[]>([
     { id: Date.now(), typeId: "", typeName: "", pages: "", files: [] }
   ]);
 
-  // загружаем проект с бэкенда по id из URL
+  // загружаем проект и сохранённые фото при открытии страницы
   useEffect(() => {
     api.get(`/projects/${id}`)
       .then(res => {
         setProject(res.data);
-        // инициализируем даты после загрузки проекта
         setStartDate(formatDateForInput(res.data.startDate));
         setEndDate(formatDateForInput(res.data.endDate));
       })
       .catch(() => setProject(null));
+
+    // загружаем сохранённые фото из БД
+    api.get(`/projects/${id}/photos`)
+      .then(res => setSavedPhotos(res.data))
+      .catch(() => setSavedPhotos([]));
   }, [id]);
 
-  // только после всех хуков можно делать условный return
   if (!project) return <div>Проект не найден</div>;
 
-  // отправляет обновлённые даты на бэкенд
   const handleDatesUpdate = async (newStartDate: string, newEndDate: string) => {
     try {
       await api.patch(`/projects/${id}/dates`, {
@@ -108,7 +114,6 @@ function ProjectPage({ onLogout }: Props) {
     }
   };
 
-  // обновление конкретной секции — принимает название и частичный объект с изменениями
   const updateSection = (title: string, patch: Partial<SectionState>) => {
     setSections(prev => ({
       ...prev,
@@ -116,32 +121,27 @@ function ProjectPage({ onLogout }: Props) {
     }));
   };
 
-  // собирает метаданные всех фото — используется и в handleSave и в handleFinalSubmit
+  // собирает метаданные фото с оригинальными именами — переименование теперь на бэкенде
   const buildPhotosMeta = () => {
-    const photosMeta: { section: string; defectType?: string; filename: string; order: number }[] = [];
+    const photosMeta: { section: string; defectType?: string; originalName: string; order: number }[] = [];
 
-    // переименовываем файлы обычных секций и собираем метаданные
     for (const title of SECTIONS) {
-      const renamed = renameSection(sections[title].files, title);
-      renamed.forEach((file, i) => {
-        photosMeta.push({ section: title, filename: file.name, order: i + 1 });
+      sections[title].files.forEach((file, i) => {
+        photosMeta.push({ section: title, originalName: file.name, order: i + 1 });
       });
     }
 
-    // переименовываем файлы дефектов и собираем метаданные
     for (const d of defects) {
       if (!d.typeName || !d.files.length) continue;
-      const renamed = renameDefect(d.files, d.typeName);
-      renamed.forEach((file, i) => {
-        photosMeta.push({ section: "дефекты", defectType: d.typeName, filename: file.name, order: i + 1 });
+      d.files.forEach((file, i) => {
+        photosMeta.push({ section: "дефекты", defectType: d.typeName, originalName: file.name, order: i + 1 });
       });
     }
 
     return photosMeta;
   };
 
-  // кнопка "Сохранить" — сохраняет файлы во временную папку на сервере + метаданные в БД
-  // также вызывается автоматически перед "Записать"
+  // кнопка "Сохранить" — файлы с оригинальными именами во временную папку
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
@@ -149,29 +149,29 @@ function ProjectPage({ onLogout }: Props) {
     try {
       const formData = new FormData();
 
-      // метаданные секций (количество страниц)
       const sectionsState = Object.fromEntries(
         SECTIONS.map(title => [title, { pages: sections[title].pages }])
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
-      // переименовываем и добавляем файлы обычных секций
+      // добавляем файлы с оригинальными именами — переименование на бэкенде
       for (const title of SECTIONS) {
-        const renamed = renameSection(sections[title].files, title);
-        renamed.forEach(file => formData.append("files", file));
+        sections[title].files.forEach(file => formData.append("files", file));
       }
 
-      // переименовываем и добавляем файлы дефектов
       for (const d of defects) {
         if (!d.typeName || !d.files.length) continue;
-        const renamed = renameDefect(d.files, d.typeName);
-        renamed.forEach(file => formData.append("files", file));
+        d.files.forEach(file => formData.append("files", file));
       }
 
-      // метаданные фото передаём как JSON-строку (FormData не умеет вложенные объекты)
+      // метаданные с оригинальными именами
       formData.append("photos", JSON.stringify(buildPhotosMeta()));
 
       await api.patch(`/projects/${id}/save`, formData);
+
+      // обновляем список сохранённых фото после сохранения
+      const res = await api.get(`/projects/${id}/photos`);
+      setSavedPhotos(res.data);
     } catch {
       throw new Error("Ошибка сохранения — проверьте консоль бэкенда");
     } finally {
@@ -179,11 +179,9 @@ function ProjectPage({ onLogout }: Props) {
     }
   };
 
-  // кнопка "Записать" — валидация, автосохранение, отправка на Яндекс.Диск
   const handleFinalSubmit = async () => {
     setError(null);
 
-    // проверяем обычные секции: число выбранных файлов должно совпадать с указанным количеством страниц
     for (const title of SECTIONS) {
       const s = sections[title];
       if (s.files.length !== s.pages) {
@@ -192,9 +190,8 @@ function ProjectPage({ onLogout }: Props) {
       }
     }
 
-    // проверяем дефекты: у каждого заполненного дефекта файлы должны совпадать со страницами
     for (const d of defects) {
-      if (!d.typeId || !d.pages) continue; // пустой дефект пропускаем
+      if (!d.typeId || !d.pages) continue;
       if (d.files.length !== Number(d.pages)) {
         setError(`Дефект №${defects.indexOf(d) + 1}: выбрано ${d.files.length} файлов, а указано ${d.pages}`);
         return;
@@ -205,10 +202,8 @@ function ProjectPage({ onLogout }: Props) {
       setIsUploading(true);
       setUploadProgress(0);
 
-      // сначала всегда сохраняем файлы на сервер — так работает и при прямой записи и после черновика
       await handleSave();
 
-      // затем отправляем на Яндекс.Диск — файлы бэкенд читает из временной папки
       await api.post(
         `/projects/${id}/upload`,
         {
@@ -216,27 +211,18 @@ function ProjectPage({ onLogout }: Props) {
           photos: JSON.stringify(buildPhotosMeta()),
         },
         {
-          /*onUploadProgress: (progressEvent) => {
-            const percent = Math.round(
-              (progressEvent.loaded * 100) / (progressEvent.total ?? 1)
-            );
-            setUploadProgress(percent);
-          },*/
-          
-          // трекер загрузки фото
           onUploadProgress: (progressEvent) => {
             const percent = Math.round(
               (progressEvent.loaded * 100) / (progressEvent.total ?? 1)
             );
-            // показываем максимум 70% пока файлы идут на сервер
-            // остальные 30% — это загрузка на Яндекс.Диск
             setUploadProgress(Math.min(percent, 70));
           },
         }
       );
 
+      setUploadProgress(100);
       setShowModal(true);
-    } catch (e) {
+    } catch {
       setError("Ошибка загрузки — проверьте консоль бэкенда");
     } finally {
       setIsUploading(false);
@@ -245,17 +231,13 @@ function ProjectPage({ onLogout }: Props) {
 
   return (
     <div className="dashboard">
-      {/* пробрасываем onLogout в Header */}
       <Header onLogout={onLogout} />
-      {/* Контент */}
       <div className="project-page-bg">
         <div className="project-container">
 
           <div className="project-header">
             <button className="back-button" onClick={() => navigate("/")}><img src="/arrow_back.png" alt="Назад" /></button>
             <h1>{project.name}</h1>
-
-            {/* Статус для десктопа */}
             <span className={`status ${project.status === "В работе" ? "in-progress" : "done"} desktop-only`}>
               {project.status}
             </span>
@@ -263,11 +245,9 @@ function ProjectPage({ onLogout }: Props) {
 
           <div className="project-meta">
             <div className="meta-top">
-              {/* Статус для мобильных */}
               <span className={`status ${project.status === "В работе" ? "in-progress" : "done"} mobile-only`}>
                 {project.status}
               </span>
-
               <div className="responsible-field">
                 <img src="/responsible.png" alt="Ответственный" />
                 <span>{project.responsible}</span>
@@ -282,11 +262,10 @@ function ProjectPage({ onLogout }: Props) {
                   value={startDate}
                   onChange={e => {
                     setStartDate(e.target.value);
-                    handleDatesUpdate(e.target.value, endDate); // отправляем на бэкенд сразу при изменении
+                    handleDatesUpdate(e.target.value, endDate);
                   }}
                 />
               </div>
-
               <div className="date-field">
                 <label>Дата окончания</label>
                 <input
@@ -301,30 +280,30 @@ function ProjectPage({ onLogout }: Props) {
             </div>
           </div>
 
-          {/* Используем один компонент ProjectSection с разными пропсами для разных разделов.
-              Состояние каждой секции хранится здесь и передаётся вниз через пропсы */}
           {SECTIONS.map(title => (
             <ProjectSection
               key={title}
               title={title}
               files={sections[title].files}
               pages={sections[title].pages}
+              // передаём оригинальные имена сохранённых файлов для отображения
+              savedFileNames={savedPhotos
+                .filter(p => p.section === title)
+                .sort((a, b) => a.order - b.order)
+                .map(p => p.originalName)}
               onFilesChange={(files) => updateSection(title, { files })}
               onPagesChange={(pages) => updateSection(title, { pages })}
             />
           ))}
 
-          {/* Состояние дефектов также хранится здесь и передаётся вниз */}
           <ProjectDefectSection
             title="Фотографии дефектов"
             defects={defects}
             onDefectsChange={setDefects}
           />
 
-          {/* Ошибка валидации — показывается если файлы не совпадают со страницами */}
           {error && <p className="error">{error}</p>}
 
-          {/* Прогресс-бар — показывается только во время загрузки на Яндекс.Диск */}
           {isUploading && (
             <div className="progress-wrapper">
               <p className="progress-label">Загрузка на Яндекс.Диск... {uploadProgress}%</p>
@@ -344,22 +323,20 @@ function ProjectPage({ onLogout }: Props) {
             </label>
 
             <div className="buttons">
-              {/* Сохранить — сохраняет файлы на сервер, заблокирована во время загрузки */}
               <button
                 className="btn secondary"
                 onClick={async () => {
                   try {
                     await handleSave();
                     alert("Данные сохранены");
-                  } catch (e: any) {
-                    alert(e.message);
+                  } catch (e: unknown) {
+                    alert(e instanceof Error ? e.message : "Ошибка сохранения");
                   }
                 }}
                 disabled={isUploading || isSaving}>
                 {isSaving ? "Сохранение..." : "Сохранить"}
               </button>
 
-              {/* Записать — активна только если стоит галочка "завершены", заблокирована во время загрузки */}
               <button
                 className="btn primary"
                 disabled={!completed || isUploading || isSaving}
@@ -372,7 +349,7 @@ function ProjectPage({ onLogout }: Props) {
               <SuccessModal
                 onClose={() => {
                   setShowModal(false);
-                  navigate("/"); // экран со всеми проектами
+                  navigate("/");
                 }}
               />
             )}

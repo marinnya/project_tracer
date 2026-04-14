@@ -28,15 +28,21 @@ export class ProjectsController {
 
   constructor(private readonly projectService: ProjectsService) {}
 
+  // получить сохранённые фото проекта — для отображения на странице проекта
+  @Get(':id/photos')
+  async getPhotos(@Param('id', ParseIntPipe) projectId: number) {
+    return this.projectService.getProjectPhotos(projectId);
+  }
+
   // кнопка "Сохранить" — принимает файлы и сохраняет во временную папку на сервере
   @Patch(':id/save')
   @UseInterceptors(FilesInterceptor('files', 200, {
     storage: diskStorage({
       // временная папка: uploads/tmp/<projectId>/
       destination: (req, file, cb) => {
-        //const projectId = req.params.id;
         const projectId = String(req.params.id);
         const uploadPath = path.join(process.cwd(), 'uploads', 'tmp', projectId);
+
         // создаём папку если не существует
         fs.mkdirSync(uploadPath, { recursive: true });
         cb(null, uploadPath);
@@ -56,16 +62,15 @@ export class ProjectsController {
     this.logger.log(`Сохранение черновика. projectId: ${projectId}`);
     this.logger.log(`Файлов получено: ${files?.length ?? 0}`);
 
-    // сохраняем метаданные секций в БД (количество страниц)
     const sections = JSON.parse(body.sections) as Record<string, { pages: number }>;
     await this.projectService.saveDraft(projectId, sections);
 
-    // если есть файлы — сохраняем их метаданные в БД (без yandexPath — ещё не загружены)
+    // обновлено: теперь используем originalName
     if (files?.length && body.photos) {
       const photos = JSON.parse(body.photos) as {
         section: string;
         defectType?: string;
-        filename: string;
+        originalName: string;
         order: number;
       }[];
 
@@ -77,7 +82,7 @@ export class ProjectsController {
   }
 
   // кнопка "Записать" — читает файлы из временной папки и загружает на Яндекс.Диск
-@Post(':id/upload')
+  @Post(':id/upload')
   async uploadFiles(
     @Param('id', ParseIntPipe) projectId: number,
     @Body() body: { projectName: string; photos: string },
@@ -89,46 +94,39 @@ export class ProjectsController {
       const photos = JSON.parse(body.photos) as {
         section: string;
         defectType?: string;
-        filename: string;
+        originalName: string;
         order: number;
       }[];
 
-      // читаем файлы из временной папки на сервере
       const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
+
       const files = await this.projectService.readTempFiles(tmpDir, photos);
       this.logger.log(`Файлов прочитано из временной папки: ${files.length}`);
 
-      // загружаем на Яндекс.Диск
-      const { folderUrl } = await this.projectService.uploadToYandex(
-        files,
-        body.projectName,
-        photos,
-      );
-      this.logger.log(`Яндекс.Диск — папка создана: ${folderUrl}`);
+      const { folderUrl, renamedPhotos } =
+        await this.projectService.uploadToYandex(
+          files,
+          body.projectName,
+          photos,
+        );
 
-      // сохраняем метаданные фото с путём на Яндекс.Диске
+      const renamedMap = new Map(
+        renamedPhotos.map(r => [r.originalName, r.filename])
+      );
+
       const photosWithPath = photos.map(p => ({
         ...p,
-        yandexPath: `${body.projectName}/${p.section}/${p.filename}`,
+        filename: renamedMap.get(p.originalName) ?? p.originalName,
+        yandexPath: `${body.projectName}/${p.section}/${renamedMap.get(p.originalName) ?? p.originalName}`,
       }));
+
       await this.projectService.savePhotos(projectId, photosWithPath);
-      this.logger.log(`Метаданные фото сохранены в БД`);
 
-      // СОХРАНЯЕМ ССЫЛКУ НА ПАПКУ В ПРОЕКТЕ
       await this.projectService.saveFolderUrl(projectId, folderUrl);
-      this.logger.log(`Ссылка на папку сохранена в проекте`);
-
-      // архивируем проект после успешной загрузки
       await this.projectService.archiveProject(projectId);
-      this.logger.log(`Проект ${projectId} перемещён в архив`);
-
-      // ОТПРАВЛЯЕМ ДАННЫЕ В 1С ОДНИМ ЗАПРОСОМ
       await this.projectService.sendProjectToOneC(projectId);
-      this.logger.log(`Данные отправлены в 1С`);
 
-      // удаляем временную папку — файлы уже на Яндекс.Диске
       fs.rmSync(tmpDir, { recursive: true, force: true });
-      this.logger.log(`Временная папка удалена: ${tmpDir}`);
 
       return { message: 'Файлы загружены', folderUrl };
     } catch (e: any) {
@@ -137,7 +135,6 @@ export class ProjectsController {
     }
   }
 
-  // только админ может вернуть проект из архива
   @Patch(':id/unarchive')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
@@ -145,7 +142,6 @@ export class ProjectsController {
     return this.projectService.unarchiveProject(projectId);
   }
 
-  // возвращает список всех проектов
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   async getAll(@Req() req) {
@@ -156,7 +152,6 @@ export class ProjectsController {
   async getOne(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getProjectById(projectId);
   }
-
 
   @Patch(':id/dates')
   async updateDates(

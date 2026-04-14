@@ -4,20 +4,18 @@ type Props = {
   title: string;
   files: File[];
   pages: number;
+  savedFileNames: string[]; // оригинальные имена ранее сохранённых файлов из БД
   onFilesChange: (files: File[]) => void;
   onPagesChange: (pages: number) => void;
 };
 
 const pageOptions = Array.from({ length: 11 }, (_, i) => i);
-//const VISIBLE_COUNT = 5; // сколько файлов показывать до сворачивания
 
-function ProjectSection({ title, files, pages, onFilesChange, onPagesChange }: Props) {
+function ProjectSection({ title, files, pages, savedFileNames, onFilesChange, onPagesChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [expanded, setExpanded] = useState(false); // свёрнут ли список
+  const [expanded, setExpanded] = useState(false);
 
-  // файлы которые показываем — все или только первые 5
   const visibleFiles = expanded ? files : [];
-  //const hasMore = files.length > VISIBLE_COUNT;
 
   const removeFile = (index: number) => {
     onFilesChange(files.filter((_, i) => i !== index));
@@ -38,6 +36,20 @@ function ProjectSection({ title, files, pages, onFilesChange, onPagesChange }: P
           ))}
         </select>
       </div>
+
+      {/* показываем ранее сохранённые файлы из БД */}
+      {savedFileNames.length > 0 && files.length === 0 && (
+        <div className="saved-files">
+          <p className="saved-files-label">Ранее загруженные файлы:</p>
+          <ul className="file-list">
+            {savedFileNames.map((name, index) => (
+              <li key={`saved-${index}`} className="file-item saved">
+                <span className="file-name">{name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <input
         ref={inputRef}
@@ -73,14 +85,11 @@ function ProjectSection({ title, files, pages, onFilesChange, onPagesChange }: P
             </li>
           ))}
 
-          {/* убрали hasMore — кнопка показывается всегда если есть файлы */}
           <button
             className="file-list-toggle"
             onClick={() => setExpanded(prev => !prev)}
           >
-            {expanded
-              ? "Свернуть"
-              : `Показать все (${files.length})`}
+            {expanded ? "Свернуть" : `Показать все (${files.length})`}
           </button>
         </ul>
       )}

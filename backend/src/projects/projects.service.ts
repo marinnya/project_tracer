@@ -18,9 +18,20 @@ type UploadFile = {
 
 @Injectable()
 export class ProjectsService {
-
   private readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk/resources';
   private readonly BATCH_SIZE = 10;
+
+  // маппинг секций — перенесён с фронта на бэкенд
+  private readonly sectionKeyMap: Record<string, string> = {
+    'Титульный лист': 'титульный',
+    'Технические данные объекта контроля': 'техданные',
+    'План-схема склада': 'план',
+    'Лист для фиксации повреждений': 'повреждения',
+    'Лист для фиксации отклонений в вертикальной плоскости': 'отклонения',
+    'Лист для фиксации момента затяжки болтовых и анкерных соединений': 'болты',
+    'Лист для эскизов': 'эскизы',
+    'Дополнительная информация': 'допинфо',
+  };
 
   constructor(
     private readonly prisma: PrismaService,
@@ -29,6 +40,23 @@ export class ProjectsService {
 
   private getHeaders() {
     return { Authorization: `OAuth ${process.env.YANDEX_TOKEN}` };
+  }
+
+  // генерирует переименованное имя файла перед загрузкой на Яндекс.Диск
+  private getRenamedFilename(
+    originalName: string,
+    section: string,
+    defectType: string | undefined,
+    order: number
+  ): string {
+    const ext = originalName.split('.').pop() ?? 'jpg';
+
+    if (section === 'дефекты' && defectType) {
+      return `${defectType.toLowerCase()}${order}.${ext}`;
+    }
+
+    const prefix = this.sectionKeyMap[section] ?? section.toLowerCase();
+    return `${prefix}${order}.${ext}`;
   }
 
   // создаёт папку на Яндекс.Диске (игнорирует 409 — папка уже существует)
@@ -47,6 +75,113 @@ export class ProjectsService {
     }
   }
 
+  // возвращает сохранённые фото проекта — для отображения на странице проекта
+  async getProjectPhotos(projectId: number) {
+    return this.prisma.projectPhoto.findMany({
+      where: { projectId },
+      orderBy: [{ section: 'asc' }, { order: 'asc' }],
+    });
+  }
+
+  // обновить saveTempPhotos — сохраняем originalName
+  async saveTempPhotos(
+    projectId: number,
+    photos: { section: string; defectType?: string; originalName: string; order: number }[],
+  ) {
+    await this.prisma.projectPhoto.deleteMany({ where: { projectId } });
+
+    return this.prisma.projectPhoto.createMany({
+      data: photos.map(p => ({
+        ...p,
+        projectId,
+        filename: null,
+        yandexPath: null,
+      })),
+    });
+  }
+
+  // обновить uploadToYandex — переименование на бэкенде перед загрузкой
+  async uploadToYandex(
+    files: UploadFile[],
+    projectName: string,
+    photos: { section: string; originalName: string; order: number; defectType?: string }[],
+  ): Promise<{ message: string; folderUrl: string; renamedPhotos: { originalName: string; filename: string }[] }> {
+
+    await this.createFolder(projectName);
+
+    const sections = [...new Set(photos.map(p => p.section))];
+    await Promise.all(sections.map(section => this.createFolder(`${projectName}/${section}`)));
+
+    const photoMap = new Map<string, { section: string; order: number; defectType?: string }>();
+    for (const photo of photos) {
+      photoMap.set(photo.originalName, {
+        section: photo.section,
+        order: photo.order,
+        defectType: photo.defectType,
+      });
+    }
+
+    const renamedPhotos: { originalName: string; filename: string }[] = [];
+
+    for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
+      const batch = files.slice(i, i + this.BATCH_SIZE);
+
+      await Promise.all(
+        batch.map(file => {
+          const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+
+          const meta = photoMap.get(originalName);
+          const section = meta?.section ?? 'прочее';
+          const order = meta?.order ?? i + 1;
+          const defectType = meta?.defectType;
+
+          const renamedFilename = this.getRenamedFilename(originalName, section, defectType, order);
+
+          renamedPhotos.push({ originalName, filename: renamedFilename });
+
+          const folderPath = `${projectName}/${section}`;
+
+          const renamedFile = {
+            ...file,
+            originalname: Buffer.from(renamedFilename).toString('latin1'),
+          };
+
+          return this.uploadFile(renamedFile, folderPath).catch((e: unknown) => {
+            const message = e instanceof Error ? e.message : String(e);
+            throw new InternalServerErrorException(`Ошибка загрузки файла ${originalName}: ${message}`);
+          });
+        })
+      );
+    }
+
+    const folderUrl = await this.getPublicUrl(projectName);
+
+    return {
+      message: 'Файлы успешно загружены',
+      folderUrl,
+      renamedPhotos,
+    };
+  }
+
+  // обновить savePhotos — сохраняем оба имени
+  async savePhotos(
+    projectId: number,
+    photos: {
+      section: string;
+      defectType?: string;
+      originalName: string;
+      filename: string;
+      yandexPath: string;
+      order: number;
+    }[]
+  ) {
+    await this.prisma.projectPhoto.deleteMany({ where: { projectId } });
+
+    return this.prisma.projectPhoto.createMany({
+      data: photos.map(p => ({ ...p, projectId })),
+    });
+  }
+
   // загружает один файл — принимает buffer или читает с диска
   private async uploadFile(file: UploadFile, folderPath: string): Promise<void> {
     const filename = Buffer.from(file.originalname, 'latin1').toString('utf8');
@@ -57,7 +192,6 @@ export class ProjectsService {
       { headers: this.getHeaders() },
     );
 
-    // читаем файл с диска если buffer не передан
     const fileBuffer = file.buffer ?? fs.readFileSync(file.path!);
 
     await axios.put(data.href, fileBuffer, {
@@ -82,101 +216,34 @@ export class ProjectsService {
     return data.public_url;
   }
 
-  // читает файлы из временной папки и возвращает в формате совместимом с uploadToYandex
+  // исправлено: теперь используем originalName
   async readTempFiles(
     tmpDir: string,
-    photos: { filename: string; section: string; order: number; defectType?: string }[],
+    photos: { originalName: string; section: string; order: number; defectType?: string }[],
   ): Promise<Express.Multer.File[]> {
-    // проверяем что временная папка существует
+
     if (!fs.existsSync(tmpDir)) {
       throw new InternalServerErrorException(
         'Временная папка не найдена — сначала нажмите "Сохранить"'
       );
     }
 
-    // читаем каждый файл из папки и собираем в массив
     return photos.map(photo => {
-      const filePath = path.join(tmpDir, photo.filename);
+      const filePath = path.join(tmpDir, photo.originalName);
 
       if (!fs.existsSync(filePath)) {
         throw new InternalServerErrorException(
-          `Файл не найден во временной папке: ${photo.filename}`
+          `Файл не найден во временной папке: ${photo.originalName}`
         );
       }
 
       return {
-        originalname: Buffer.from(photo.filename).toString('latin1'), // обратное преобразование для uploadFile
+        originalname: Buffer.from(photo.originalName).toString('latin1'),
         path: filePath,
-        mimetype: 'image/jpeg', // определяем по расширению если нужно
+        mimetype: 'application/octet-stream',
         buffer: undefined,
       } as unknown as Express.Multer.File;
     });
-  }
-
-  // сохраняет метаданные временных файлов в БД (без yandexPath)
-  async saveTempPhotos(
-    projectId: number,
-    photos: { section: string; defectType?: string; filename: string; order: number }[],
-  ) {
-    // удаляем старые временные записи
-    await this.prisma.projectPhoto.deleteMany({ where: { projectId } });
-
-    // сохраняем новые без yandexPath — он заполнится после загрузки на Яндекс.Диск
-    return this.prisma.projectPhoto.createMany({
-      data: photos.map(p => ({ ...p, projectId, yandexPath: null })),
-    });
-  }
-
-  // основной метод: создаёт папку проекта, внутри — подпапки по секциям, загружает файлы
-  async uploadToYandex(
-    files: UploadFile[],
-    projectName: string,
-    // метаданные нужны чтобы знать какой файл в какую секцию кладём
-    photos: { section: string; filename: string; order: number; defectType?: string }[],
-  ): Promise<{ message: string; folderUrl: string }> {
-
-    // 1. создаём корневую папку проекта
-    await this.createFolder(projectName);
-
-    // 2. собираем уникальные названия секций из метаданных
-    const sections = [...new Set(photos.map(p => p.section))];
-
-    // 3. создаём подпапки для каждой секции параллельно
-    await Promise.all(
-      sections.map(section =>
-        this.createFolder(`${projectName}/${section}`)
-      )
-    );
-
-    // 4. строим map: имя файла → секция (чтобы при загрузке знать куда класть)
-    const fileToSection = new Map<string, string>();
-    for (const photo of photos) {
-      fileToSection.set(photo.filename, photo.section);
-    }
-
-    // 5. загружаем файлы батчами по 10, каждый в свою подпапку секции
-    for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
-      const batch = files.slice(i, i + this.BATCH_SIZE);
-      await Promise.all(
-        batch.map(file => {
-          const filename = Buffer.from(file.originalname, 'latin1').toString('utf8');
-          const section = fileToSection.get(filename) ?? 'прочее';
-          const folderPath = `${projectName}/${section}`;
-
-          return this.uploadFile(file, folderPath).catch((e: unknown) => {
-            const message = e instanceof Error ? e.message : String(e);
-            throw new InternalServerErrorException(
-              `Ошибка загрузки файла ${file.originalname}: ${message}`
-            );
-          });
-        })
-      );
-    }
-
-    // 6. получаем публичную ссылку на корневую папку проекта
-    const folderUrl = await this.getPublicUrl(projectName);
-
-    return { message: 'Файлы успешно загружены', folderUrl };
   }
 
   async saveDraft(projectId: number, sectionsState: Record<string, { pages: number }>) {
@@ -187,20 +254,6 @@ export class ProjectsService {
     });
   }
 
-  async savePhotos(
-    projectId: number,
-    photos: { section: string; defectType?: string; filename: string; yandexPath: string; order: number }[]
-  ) {
-    // удаляем старые фото проекта если были
-    await this.prisma.projectPhoto.deleteMany({ where: { projectId } });
-
-    // записываем новые с путём на Яндекс.Диске
-    return this.prisma.projectPhoto.createMany({
-      data: photos.map(p => ({ ...p, projectId })),
-    });
-  }
-
-  // сохраняет ссылку на папку Яндекс.Диска в проекте
   async saveFolderUrl(projectId: number, folderUrl: string) {
     return this.prisma.project.update({
       where: { id: projectId },
@@ -212,7 +265,6 @@ export class ProjectsService {
     return this.prisma.project.findUnique({ where: { id: projectId } });
   }
 
-  // архивирует проект после записи на Яндекс.Диск
   async archiveProject(projectId: number) {
     return this.prisma.project.update({
       where: { id: projectId },
@@ -223,7 +275,6 @@ export class ProjectsService {
     });
   }
 
-  // возвращает проект из архива (только для админа)
   async unarchiveProject(projectId: number) {
     return this.prisma.project.update({
       where: { id: projectId },
@@ -234,7 +285,6 @@ export class ProjectsService {
     });
   }
 
-  // удаляет проекты которые в архиве более 3 месяцев
   async deleteOldArchivedProjects() {
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
@@ -246,7 +296,6 @@ export class ProjectsService {
     });
   }
 
-  // удаление старых проектов: запускается каждый день в полночь
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleOldArchivedProjects() {
     const deleted = await this.deleteOldArchivedProjects();
@@ -259,20 +308,18 @@ export class ProjectsService {
     });
   }
 
-  // Выводим проекты для сотрудника/админа
   async getProjectsForUser(user: User) {
     console.log('User:', user.id, user.oneCId);
-    console.log('Projects query filter:', { responsibleId: user.id, oneCResponsibleId: user.oneCId });
+
     if (user.role === 'ADMIN') {
       return this.prisma.project.findMany();
     }
-    
+
     return this.prisma.project.findMany({
       where: { responsibleId: user.id },
     });
   }
 
-  // для обновления дат проекта
   async updateDates(projectId: number, startDate: string | null, endDate: string | null) {
     return this.prisma.project.update({
       where: { id: projectId },
@@ -283,9 +330,6 @@ export class ProjectsService {
     });
   }
 
-  /**
-   * Собирает данные проекта и отправляет в 1С одним запросом
-   */
   async sendProjectToOneC(projectId: number) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
@@ -296,7 +340,6 @@ export class ProjectsService {
       return;
     }
 
-    // если проект не из 1С — ничего не отправляем
     if (!project.oneCId) {
       console.log(`Проект ${projectId} не связан с 1С`);
       return;
