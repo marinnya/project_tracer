@@ -121,6 +121,7 @@ export default function Dashboard({ onLogout }: Props) {
         src="/arrow_down.png"
         alt=""
         className={`arrow ${active && direction === "desc" ? "open" : ""}`}
+        /*className={`arrow ${sortDirection === "desc" ? "open" : ""}`}*/
         style={{ marginLeft: 4 }}
       />
     );

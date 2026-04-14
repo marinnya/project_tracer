@@ -545,6 +545,14 @@ body {
   transform: rotate(180deg);
 }
 
+.arrow {
+  transition: transform 0.25s ease;
+  transform: rotate(0deg);
+}
+
+.arrow.open {
+  transform: rotate(180deg);
+}
 
 
 /* === адаптация === */
