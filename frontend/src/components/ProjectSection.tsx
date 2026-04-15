@@ -15,7 +15,17 @@ function ProjectSection({ title, files, pages, savedFileNames, onFilesChange, on
   const inputRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(false);
 
-  const visibleFiles = expanded ? files : [];
+  // объединяем новые файлы и сохранённые имена для отображения
+  // новые файлы показываем первыми, потом сохранённые которые не были заменены
+  const allFileNames = [
+    ...files.map(f => ({ name: f.name, isSaved: false, index: files.indexOf(f) })),
+    ...savedFileNames
+      .filter(name => !files.some(f => f.name === name)) // не показываем если уже есть среди новых
+      .map(name => ({ name, isSaved: true, index: -1 })),
+  ];
+
+  const visibleFiles = expanded ? allFileNames : [];
+  const totalCount = allFileNames.length;
 
   const removeFile = (index: number) => {
     onFilesChange(files.filter((_, i) => i !== index));
@@ -37,20 +47,6 @@ function ProjectSection({ title, files, pages, savedFileNames, onFilesChange, on
         </select>
       </div>
 
-      {/* показываем ранее сохранённые файлы из БД */}
-      {savedFileNames.length > 0 && files.length === 0 && (
-        <div className="saved-files">
-          <p className="saved-files-label">Ранее загруженные файлы:</p>
-          <ul className="file-list">
-            {savedFileNames.map((name, index) => (
-              <li key={`saved-${index}`} className="file-item saved">
-                <span className="file-name">{name}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <input
         ref={inputRef}
         type="file"
@@ -70,18 +66,21 @@ function ProjectSection({ title, files, pages, savedFileNames, onFilesChange, on
         <span className="mobile-only">Выберите файлы (до 10 Мб)</span>
       </div>
 
-      {files.length > 0 && (
+      {totalCount > 0 && (
         <ul className="file-list">
-          {visibleFiles.map((file, index) => (
-            <li key={`${file.name}-${index}`} className="file-item">
-              <span className="file-name">{file.name}</span>
-              <button
-                className="file-remove"
-                onClick={() => removeFile(index)}
-                title="Удалить файл"
-              >
-                ✕
-              </button>
+          {visibleFiles.map((item, index) => (
+            <li key={`${item.name}-${index}`} className="file-item">
+              <span className="file-name">{item.name}</span>
+              {/* кнопка удаления только для новых файлов, сохранённые не удаляем */}
+              {!item.isSaved && (
+                <button
+                  className="file-remove"
+                  onClick={() => removeFile(item.index)}
+                  title="Удалить файл"
+                >
+                  ✕
+                </button>
+              )}
             </li>
           ))}
 
@@ -89,7 +88,7 @@ function ProjectSection({ title, files, pages, savedFileNames, onFilesChange, on
             className="file-list-toggle"
             onClick={() => setExpanded(prev => !prev)}
           >
-            {expanded ? "Свернуть" : `Показать все (${files.length})`}
+            {expanded ? "Свернуть" : `Показать все (${totalCount})`}
           </button>
         </ul>
       )}
