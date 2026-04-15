@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 
 type SavedPhoto = {
   id: number;
@@ -29,19 +29,54 @@ function ProjectSection({
   const inputRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(false);
 
-  const allFiles = [
-    ...savedPhotos.map(p => ({
-      id: p.id,
-      name: p.originalName,
-      isSaved: true as const,
-    })),
-    ...files.map(f => ({
-      name: f.name,
-      isSaved: false as const,
-    })),
-  ];
+  // ===============================
+  // 1. УНИКАЛИЗАЦИЯ ИМЁН
+  // ===============================
+  const normalizeFiles = (files: File[]) => {
+    const nameCount: Record<string, number> = {};
 
-  const visibleFiles = expanded ? allFiles : allFiles.slice(0, 3);
+    return files.map((file) => {
+      const name = file.name;
+
+      if (!nameCount[name]) {
+        nameCount[name] = 1;
+        return file;
+      }
+
+      const newIndex = ++nameCount[name];
+      const newName = name.replace(/(\.[^.]*)?$/, ` (${newIndex})$1`);
+
+      return new File([file], newName, { type: file.type });
+    });
+  };
+
+  const handleAddFiles = (newFiles: FileList) => {
+    const normalized = normalizeFiles(Array.from(newFiles));
+    onFilesChange([...files, ...normalized]);
+  };
+
+  // ===============================
+  // 2. ОБЪЕДИНЕНИЕ БЕЗ ДУБЛЕЙ
+  // ===============================
+  const allFiles = useMemo(() => {
+    const savedNames = new Set(savedPhotos.map(p => p.originalName));
+
+    return [
+      ...savedPhotos.map(p => ({
+        id: p.id,
+        name: p.originalName,
+        isSaved: true as const,
+      })),
+      ...files
+        .filter(f => !savedNames.has(f.name)) // 🔥 убираем дубли после save
+        .map(f => ({
+          name: f.name,
+          isSaved: false as const,
+        })),
+    ];
+  }, [savedPhotos, files]);
+
+  const visibleFiles = expanded ? allFiles : [];
 
   const removeNewFile = (name: string) => {
     onFilesChange(files.filter(f => f.name !== name));
@@ -51,19 +86,16 @@ function ProjectSection({
     <div className="project-section">
       <h3>{title}</h3>
 
-      <div className="section-row">
-        <label>Количество страниц*</label>
-        <select
-          value={pages}
-          onChange={(e) => onPagesChange(Number(e.target.value))}
-        >
-          {pageOptions.map(n => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </div>
+      <select
+        value={pages}
+        onChange={(e) => onPagesChange(Number(e.target.value))}
+      >
+        {pageOptions.map(n => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
 
       <input
         ref={inputRef}
@@ -73,50 +105,50 @@ function ProjectSection({
         style={{ display: "none" }}
         onChange={(e) => {
           if (!e.target.files) return;
-          onFilesChange([...files, ...Array.from(e.target.files)]);
+          handleAddFiles(e.target.files);
           e.target.value = "";
         }}
       />
 
-      <div className="file-row" onClick={() => inputRef.current?.click()}>
-        <img src="/clip.png" alt="attach" />
-        <span>Выберите файлы</span>
-      </div>
+      <button onClick={() => inputRef.current?.click()}>
+        Выбрать файлы
+      </button>
 
+      {/* =============================== */}
+      {/* СКРЫТО ПО УМОЛЧАНИЮ */}
+      {/* =============================== */}
       {allFiles.length > 0 && (
-        <ul className="file-list">
-          {visibleFiles.map((item) => (
-            <li
-              key={item.isSaved ? item.id : item.name}
-              className="file-item"
-            >
-              <span className="file-name">{item.name}</span>
-
-              <button
-                className="file-remove"
-                onClick={() => {
-                  if (item.isSaved) {
-                    onRemoveSaved(item.id);
-                  } else {
-                    removeNewFile(item.name);
-                  }
-                }}
-                title="Удалить файл"
-              >
-                ✕
-              </button>
-            </li>
-          ))}
-
-          {allFiles.length > 3 && (
-            <button
-              className="file-list-toggle"
-              onClick={() => setExpanded(p => !p)}
-            >
-              {expanded ? "Свернуть" : `Показать все (${allFiles.length})`}
+        <>
+          {!expanded ? (
+            <button onClick={() => setExpanded(true)}>
+              Показать все ({allFiles.length})
             </button>
+          ) : (
+            <ul>
+              {allFiles.map((item) => (
+                <li key={item.isSaved ? item.id : item.name}>
+                  {item.name}
+
+                  <button
+                    onClick={() => {
+                      if (item.isSaved) {
+                        onRemoveSaved(item.id);
+                      } else {
+                        removeNewFile(item.name);
+                      }
+                    }}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+
+              <button onClick={() => setExpanded(false)}>
+                Свернуть
+              </button>
+            </ul>
           )}
-        </ul>
+        </>
       )}
     </div>
   );
