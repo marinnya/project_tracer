@@ -8,7 +8,6 @@ import SuccessModal from "../components/SuccessModal";
 import { useParams } from "react-router-dom";
 import api from "../utils/api";
 
-// Типы
 type Project = {
   id: number;
   name: string;
@@ -121,14 +120,27 @@ function ProjectPage({ onLogout }: Props) {
     }));
   };
 
-  // собирает метаданные фото с оригинальными именами — переименование теперь на бэкенде
+  // собирает метаданные фото — если новых нет, берём сохранённые из БД
   const buildPhotosMeta = () => {
     const photosMeta: { section: string; defectType?: string; originalName: string; order: number }[] = [];
 
     for (const title of SECTIONS) {
-      sections[title].files.forEach((file, i) => {
-        photosMeta.push({ section: title, originalName: file.name, order: i + 1 });
-      });
+      const newFiles = sections[title].files;
+
+      if (newFiles.length > 0) {
+        // есть новые файлы — используем их
+        newFiles.forEach((file, i) => {
+          photosMeta.push({ section: title, originalName: file.name, order: i + 1 });
+        });
+      } else {
+        // новых нет — используем сохранённые из БД
+        savedPhotos
+          .filter(p => p.section === title)
+          .sort((a, b) => a.order - b.order)
+          .forEach(p => {
+            photosMeta.push({ section: title, originalName: p.originalName, order: p.order });
+          });
+      }
     }
 
     for (const d of defects) {
@@ -154,7 +166,7 @@ function ProjectPage({ onLogout }: Props) {
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
-      // добавляем файлы с оригинальными именами — переименование на бэкенде
+      // добавляем только новые файлы — переименование на бэкенде
       for (const title of SECTIONS) {
         sections[title].files.forEach(file => formData.append("files", file));
       }
@@ -164,7 +176,7 @@ function ProjectPage({ onLogout }: Props) {
         d.files.forEach(file => formData.append("files", file));
       }
 
-      // метаданные с оригинальными именами
+      // метаданные с оригинальными именами (включая сохранённые если новых нет)
       formData.append("photos", JSON.stringify(buildPhotosMeta()));
 
       await api.patch(`/projects/${id}/save`, formData);
@@ -182,10 +194,15 @@ function ProjectPage({ onLogout }: Props) {
   const handleFinalSubmit = async () => {
     setError(null);
 
+    // проверяем обычные секции — учитываем и новые файлы и сохранённые из БД
     for (const title of SECTIONS) {
       const s = sections[title];
-      if (s.files.length !== s.pages) {
-        setError(`Раздел "${title}": выбрано ${s.files.length} файлов, а указано ${s.pages}`);
+      const savedCount = savedPhotos.filter(p => p.section === title).length;
+      // если есть новые файлы — считаем их, иначе считаем сохранённые
+      const totalFiles = s.files.length > 0 ? s.files.length : savedCount;
+
+      if (totalFiles !== s.pages) {
+        setError(`Раздел "${title}": выбрано ${totalFiles} файлов, а указано ${s.pages}`);
         return;
       }
     }
@@ -286,7 +303,6 @@ function ProjectPage({ onLogout }: Props) {
               title={title}
               files={sections[title].files}
               pages={sections[title].pages}
-              // передаём оригинальные имена сохранённых файлов для отображения
               savedFileNames={savedPhotos
                 .filter(p => p.section === title)
                 .sort((a, b) => a.order - b.order)
