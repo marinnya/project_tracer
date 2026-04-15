@@ -30,7 +30,6 @@ type Defect = {
   files: File[];
 };
 
-// тип сохранённого фото из БД — для отображения ранее загруженных файлов
 type SavedPhoto = {
   id: number;
   section: string;
@@ -73,8 +72,8 @@ function ProjectPage({ onLogout }: Props) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // сохранённые фото из БД — для отображения ранее загруженных файлов
   const [savedPhotos, setSavedPhotos] = useState<SavedPhoto[]>([]);
+  const [deletedPhotoIds, setDeletedPhotoIds] = useState<number[]>([]);
 
   const [sections, setSections] = useState<Record<string, SectionState>>(
     Object.fromEntries(SECTIONS.map(s => [s, { files: [], pages: 0 }]))
@@ -84,7 +83,6 @@ function ProjectPage({ onLogout }: Props) {
     { id: Date.now(), typeId: "", typeName: "", pages: "", files: [] }
   ]);
 
-  // загружаем проект и сохранённые фото при открытии страницы
   useEffect(() => {
     api.get(`/projects/${id}`)
       .then(res => {
@@ -94,7 +92,6 @@ function ProjectPage({ onLogout }: Props) {
       })
       .catch(() => setProject(null));
 
-    // загружаем сохранённые фото из БД
     api.get(`/projects/${id}/photos`)
       .then(res => setSavedPhotos(res.data))
       .catch(() => setSavedPhotos([]));
@@ -120,40 +117,63 @@ function ProjectPage({ onLogout }: Props) {
     }));
   };
 
-  // собирает метаданные фото — если новых нет, берём сохранённые из БД
+  // ✅ удаление сохранённого файла
+  const handleRemoveSaved = (photoId: number) => {
+    setDeletedPhotoIds(prev => [...prev, photoId]);
+    setSavedPhotos(prev => prev.filter(p => p.id !== photoId));
+  };
+
+  // ✅ НОВАЯ логика: старые + новые
   const buildPhotosMeta = () => {
-    const photosMeta: { section: string; defectType?: string; originalName: string; order: number }[] = [];
+    const photosMeta: {
+      section: string;
+      defectType?: string;
+      originalName: string;
+      order: number;
+    }[] = [];
 
     for (const title of SECTIONS) {
       const newFiles = sections[title].files;
 
-      if (newFiles.length > 0) {
-        // есть новые файлы — используем их
-        newFiles.forEach((file, i) => {
-          photosMeta.push({ section: title, originalName: file.name, order: i + 1 });
+      const saved = savedPhotos
+        .filter(p => p.section === title)
+        .sort((a, b) => a.order - b.order);
+
+      // сначала сохранённые
+      saved.forEach(p => {
+        photosMeta.push({
+          section: title,
+          originalName: p.originalName,
+          order: p.order
         });
-      } else {
-        // новых нет — используем сохранённые из БД
-        savedPhotos
-          .filter(p => p.section === title)
-          .sort((a, b) => a.order - b.order)
-          .forEach(p => {
-            photosMeta.push({ section: title, originalName: p.originalName, order: p.order });
-          });
-      }
+      });
+
+      // потом новые
+      newFiles.forEach((file, i) => {
+        photosMeta.push({
+          section: title,
+          originalName: file.name,
+          order: saved.length + i + 1
+        });
+      });
     }
 
+    // дефекты не трогаем
     for (const d of defects) {
       if (!d.typeName || !d.files.length) continue;
       d.files.forEach((file, i) => {
-        photosMeta.push({ section: "дефекты", defectType: d.typeName, originalName: file.name, order: i + 1 });
+        photosMeta.push({
+          section: "дефекты",
+          defectType: d.typeName,
+          originalName: file.name,
+          order: i + 1
+        });
       });
     }
 
     return photosMeta;
   };
 
-  // кнопка "Сохранить" — файлы с оригинальными именами во временную папку
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
@@ -166,9 +186,10 @@ function ProjectPage({ onLogout }: Props) {
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
-      // добавляем только новые файлы — переименование на бэкенде
       for (const title of SECTIONS) {
-        sections[title].files.forEach(file => formData.append("files", file));
+        sections[title].files.forEach(file =>
+          formData.append("files", file)
+        );
       }
 
       for (const d of defects) {
@@ -176,14 +197,15 @@ function ProjectPage({ onLogout }: Props) {
         d.files.forEach(file => formData.append("files", file));
       }
 
-      // метаданные с оригинальными именами (включая сохранённые если новых нет)
       formData.append("photos", JSON.stringify(buildPhotosMeta()));
+      formData.append("deletedPhotos", JSON.stringify(deletedPhotoIds)); // ✅
 
       await api.patch(`/projects/${id}/save`, formData);
 
-      // обновляем список сохранённых фото после сохранения
       const res = await api.get(`/projects/${id}/photos`);
       setSavedPhotos(res.data);
+      setDeletedPhotoIds([]); // очистка
+
     } catch {
       throw new Error("Ошибка сохранения — проверьте консоль бэкенда");
     } finally {
@@ -194,12 +216,12 @@ function ProjectPage({ onLogout }: Props) {
   const handleFinalSubmit = async () => {
     setError(null);
 
-    // проверяем обычные секции — учитываем и новые файлы и сохранённые из БД
     for (const title of SECTIONS) {
       const s = sections[title];
       const savedCount = savedPhotos.filter(p => p.section === title).length;
-      // если есть новые файлы — считаем их, иначе считаем сохранённые
-      const totalFiles = s.files.length > 0 ? s.files.length : savedCount;
+
+      // ✅ FIX: сумма
+      const totalFiles = s.files.length + savedCount;
 
       if (totalFiles !== s.pages) {
         setError(`Раздел "${title}": выбрано ${totalFiles} файлов, а указано ${s.pages}`);
@@ -303,12 +325,12 @@ function ProjectPage({ onLogout }: Props) {
               title={title}
               files={sections[title].files}
               pages={sections[title].pages}
-              savedFileNames={savedPhotos
+              savedPhotos={savedPhotos
                 .filter(p => p.section === title)
-                .sort((a, b) => a.order - b.order)
-                .map(p => p.originalName)}
+                .sort((a, b) => a.order - b.order)}
               onFilesChange={(files) => updateSection(title, { files })}
               onPagesChange={(pages) => updateSection(title, { pages })}
+              onRemoveSaved={handleRemoveSaved} // ✅
             />
           ))}
 

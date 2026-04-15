@@ -54,12 +54,18 @@ export class ProjectsController {
   async saveDraft(
     @Param('id', ParseIntPipe) projectId: number,
     @UploadedFiles() files: Express.Multer.File[],
-    @Body() body: { sections: string; photos: string },
+    @Body() body: { sections: string; photos: string; deletedPhotos?: string },
   ) {
     this.logger.log(`Сохранение черновика. projectId: ${projectId}`);
 
     const sections = JSON.parse(body.sections);
     await this.projectService.saveDraft(projectId, sections);
+
+    // ✅ удаление сохранённых
+    const deletedPhotos = JSON.parse(body.deletedPhotos || "[]");
+    if (deletedPhotos.length) {
+      await this.projectService.deletePhotos(deletedPhotos);
+    }
 
     if (files?.length && body.photos) {
       const photos = JSON.parse(body.photos) as {
@@ -150,4 +156,6 @@ export class ProjectsController {
   ) {
     return this.projectService.updateDates(projectId, body.startDate, body.endDate);
   }
+
+  
 }

@@ -265,6 +265,15 @@ export class ProjectsService {
     return this.prisma.project.findUnique({ where: { id: projectId } });
   }
 
+  /* для удаления фото*/
+  async deletePhotos(photoIds: number[]) {
+    if (!photoIds?.length) return;
+
+    return this.prisma.projectPhoto.deleteMany({
+      where: { id: { in: photoIds } },
+    });
+  }
+
   async archiveProject(projectId: number) {
     return this.prisma.project.update({
       where: { id: projectId },
