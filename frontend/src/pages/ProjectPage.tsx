@@ -334,7 +334,9 @@ function ProjectPage({ onLogout }: Props) {
           <ProjectDefectSection
             title="Фотографии дефектов"
             defects={defects}
+            savedPhotos={savedPhotos}
             onDefectsChange={setDefects}
+            onRemoveSaved={handleRemoveSaved}
           />
 
           {error && <p className="error">{error}</p>}
