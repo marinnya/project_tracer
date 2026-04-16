@@ -29,54 +29,48 @@ function ProjectSection({
   const inputRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(false);
 
-  // ===============================
-  // 1. УНИКАЛИЗАЦИЯ ИМЁН
-  // ===============================
-  const normalizeFiles = (files: File[]) => {
-    const nameCount: Record<string, number> = {};
+  const handleAddFiles = (newFiles: FileList) => {
+    const existing = [
+      ...savedPhotos.map(p => p.originalName),
+      ...files.map(f => f.name),
+    ];
 
-    return files.map((file) => {
-      const name = file.name;
+    const result: File[] = [...files];
 
-      if (!nameCount[name]) {
-        nameCount[name] = 1;
-        return file;
+    Array.from(newFiles).forEach(file => {
+      let name = file.name;
+      const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
+      const base = name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : name;
+
+      // если имя уже занято — добавляем (1), (2) и т.д.
+      if (existing.includes(name)) {
+        let counter = 1;
+        while (existing.includes(`${base} (${counter})${ext}`)) {
+          counter++;
+        }
+        name = `${base} (${counter})${ext}`;
       }
 
-      const newIndex = ++nameCount[name];
-      const newName = name.replace(/(\.[^.]*)?$/, ` (${newIndex})$1`);
-
-      return new File([file], newName, { type: file.type });
+      existing.push(name);
+      result.push(new File([file], name, { type: file.type }));
     });
+
+    onFilesChange(result);
   };
 
-  const handleAddFiles = (newFiles: FileList) => {
-    const normalized = normalizeFiles(Array.from(newFiles));
-    onFilesChange([...files, ...normalized]);
-  };
-
-  // ===============================
-  // 2. ОБЪЕДИНЕНИЕ БЕЗ ДУБЛЕЙ
-  // ===============================
-  const allFiles = useMemo(() => {
-    const savedNames = new Set(savedPhotos.map(p => p.originalName));
-
-    return [
-      ...savedPhotos.map(p => ({
-        id: p.id,
-        name: p.originalName,
-        isSaved: true as const,
-      })),
-      ...files
-        .filter(f => !savedNames.has(f.name)) // 🔥 убираем дубли после save
-        .map(f => ({
-          name: f.name,
-          isSaved: false as const,
-        })),
-    ];
-  }, [savedPhotos, files]);
-
-  const visibleFiles = expanded ? allFiles : [];
+  // объединяем сохранённые и новые файлы для отображения
+  const allFiles = useMemo(() => [
+    ...savedPhotos.map(p => ({
+      id: p.id,
+      name: p.originalName,
+      isSaved: true as const,
+    })),
+    ...files.map(f => ({
+      id: undefined,
+      name: f.name,
+      isSaved: false as const,
+    })),
+  ], [savedPhotos, files]);
 
   const removeNewFile = (name: string) => {
     onFilesChange(files.filter(f => f.name !== name));
@@ -86,16 +80,17 @@ function ProjectSection({
     <div className="project-section">
       <h3>{title}</h3>
 
-      <select
-        value={pages}
-        onChange={(e) => onPagesChange(Number(e.target.value))}
-      >
-        {pageOptions.map(n => (
-          <option key={n} value={n}>
-            {n}
-          </option>
-        ))}
-      </select>
+      <div className="section-row">
+        <label>Количество страниц*</label>
+        <select
+          value={pages}
+          onChange={(e) => onPagesChange(Number(e.target.value))}
+        >
+          {pageOptions.map(n => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      </div>
 
       <input
         ref={inputRef}
@@ -110,45 +105,41 @@ function ProjectSection({
         }}
       />
 
-      <button onClick={() => inputRef.current?.click()}>
-        Выбрать файлы
-      </button>
+      <div className="file-row" onClick={() => inputRef.current?.click()}>
+        <img src="/clip.png" alt="attach" />
+        <span className="desktop-only">Выберите файлы (максимальный размер до 10 Мб)</span>
+        <span className="mobile-only">Выберите файлы (до 10 Мб)</span>
+      </div>
 
-      {/* =============================== */}
-      {/* СКРЫТО ПО УМОЛЧАНИЮ */}
-      {/* =============================== */}
+      {/* список файлов — скрыт по умолчанию */}
       {allFiles.length > 0 && (
-        <>
-          {!expanded ? (
-            <button onClick={() => setExpanded(true)}>
-              Показать все ({allFiles.length})
-            </button>
-          ) : (
-            <ul>
-              {allFiles.map((item) => (
-                <li key={item.isSaved ? item.id : item.name}>
-                  {item.name}
-
-                  <button
-                    onClick={() => {
-                      if (item.isSaved) {
-                        onRemoveSaved(item.id);
-                      } else {
-                        removeNewFile(item.name);
-                      }
-                    }}
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-
-              <button onClick={() => setExpanded(false)}>
-                Свернуть
+        <ul className="file-list">
+          {expanded && allFiles.map((item, index) => (
+            <li key={`${item.name}-${index}`} className="file-item">
+              <span className="file-name">{item.name}</span>
+              <button
+                className="file-remove"
+                onClick={() => {
+                  if (item.isSaved) {
+                    onRemoveSaved(item.id!);
+                  } else {
+                    removeNewFile(item.name);
+                  }
+                }}
+                title="Удалить файл"
+              >
+                ✕
               </button>
-            </ul>
-          )}
-        </>
+            </li>
+          ))}
+
+          <button
+            className="file-list-toggle"
+            onClick={() => setExpanded(prev => !prev)}
+          >
+            {expanded ? "Свернуть" : `Показать все (${allFiles.length})`}
+          </button>
+        </ul>
       )}
     </div>
   );

@@ -72,7 +72,9 @@ function ProjectPage({ onLogout }: Props) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  // сохранённые фото из БД
   const [savedPhotos, setSavedPhotos] = useState<SavedPhoto[]>([]);
+  // id фото которые пользователь удалил — отправляем на бэкенд при сохранении
   const [deletedPhotoIds, setDeletedPhotoIds] = useState<number[]>([]);
 
   const [sections, setSections] = useState<Record<string, SectionState>>(
@@ -83,6 +85,7 @@ function ProjectPage({ onLogout }: Props) {
     { id: Date.now(), typeId: "", typeName: "", pages: "", files: [] }
   ]);
 
+  // загружаем проект и сохранённые фото при открытии страницы
   useEffect(() => {
     api.get(`/projects/${id}`)
       .then(res => {
@@ -117,13 +120,13 @@ function ProjectPage({ onLogout }: Props) {
     }));
   };
 
-  // ✅ удаление сохранённого файла
+  // удаление сохранённого фото — помечаем для удаления на бэкенде
   const handleRemoveSaved = (photoId: number) => {
     setDeletedPhotoIds(prev => [...prev, photoId]);
     setSavedPhotos(prev => prev.filter(p => p.id !== photoId));
   };
 
-  // ✅ НОВАЯ логика: старые + новые
+  // собирает метаданные фото — сначала сохранённые, потом новые
   const buildPhotosMeta = () => {
     const photosMeta: {
       section: string;
@@ -134,46 +137,32 @@ function ProjectPage({ onLogout }: Props) {
 
     for (const title of SECTIONS) {
       const newFiles = sections[title].files;
-
       const saved = savedPhotos
         .filter(p => p.section === title)
         .sort((a, b) => a.order - b.order);
 
       // сначала сохранённые
       saved.forEach(p => {
-        photosMeta.push({
-          section: title,
-          originalName: p.originalName,
-          order: p.order
-        });
+        photosMeta.push({ section: title, originalName: p.originalName, order: p.order });
       });
 
-      // потом новые
+      // потом новые — нумерация продолжается после сохранённых
       newFiles.forEach((file, i) => {
-        photosMeta.push({
-          section: title,
-          originalName: file.name,
-          order: saved.length + i + 1
-        });
+        photosMeta.push({ section: title, originalName: file.name, order: saved.length + i + 1 });
       });
     }
 
-    // дефекты не трогаем
     for (const d of defects) {
       if (!d.typeName || !d.files.length) continue;
       d.files.forEach((file, i) => {
-        photosMeta.push({
-          section: "дефекты",
-          defectType: d.typeName,
-          originalName: file.name,
-          order: i + 1
-        });
+        photosMeta.push({ section: "дефекты", defectType: d.typeName, originalName: file.name, order: i + 1 });
       });
     }
 
     return photosMeta;
   };
 
+  // кнопка "Сохранить"
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
@@ -186,10 +175,9 @@ function ProjectPage({ onLogout }: Props) {
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
+      // отправляем только новые файлы
       for (const title of SECTIONS) {
-        sections[title].files.forEach(file =>
-          formData.append("files", file)
-        );
+        sections[title].files.forEach(file => formData.append("files", file));
       }
 
       for (const d of defects) {
@@ -198,13 +186,21 @@ function ProjectPage({ onLogout }: Props) {
       }
 
       formData.append("photos", JSON.stringify(buildPhotosMeta()));
-      formData.append("deletedPhotos", JSON.stringify(deletedPhotoIds)); // ✅
+      formData.append("deletedPhotos", JSON.stringify(deletedPhotoIds));
 
       await api.patch(`/projects/${id}/save`, formData);
 
+      // обновляем сохранённые фото из БД
       const res = await api.get(`/projects/${id}/photos`);
       setSavedPhotos(res.data);
-      setDeletedPhotoIds([]); // очистка
+
+      // очищаем новые файлы — они теперь в savedPhotos
+      setSections(prev =>
+        Object.fromEntries(
+          SECTIONS.map(title => [title, { ...prev[title], files: [] }])
+        )
+      );
+      setDeletedPhotoIds([]);
 
     } catch {
       throw new Error("Ошибка сохранения — проверьте консоль бэкенда");
@@ -216,11 +212,10 @@ function ProjectPage({ onLogout }: Props) {
   const handleFinalSubmit = async () => {
     setError(null);
 
+    // валидация — учитываем сохранённые и новые файлы
     for (const title of SECTIONS) {
       const s = sections[title];
       const savedCount = savedPhotos.filter(p => p.section === title).length;
-
-      // ✅ FIX: сумма
       const totalFiles = s.files.length + savedCount;
 
       if (totalFiles !== s.pages) {
@@ -241,6 +236,7 @@ function ProjectPage({ onLogout }: Props) {
       setIsUploading(true);
       setUploadProgress(0);
 
+      // сохраняем перед загрузкой на Яндекс.Диск
       await handleSave();
 
       await api.post(
@@ -254,6 +250,7 @@ function ProjectPage({ onLogout }: Props) {
             const percent = Math.round(
               (progressEvent.loaded * 100) / (progressEvent.total ?? 1)
             );
+            // 70% — отправка на сервер, остальные 30% — загрузка на Яндекс.Диск
             setUploadProgress(Math.min(percent, 70));
           },
         }
@@ -330,7 +327,7 @@ function ProjectPage({ onLogout }: Props) {
                 .sort((a, b) => a.order - b.order)}
               onFilesChange={(files) => updateSection(title, { files })}
               onPagesChange={(pages) => updateSection(title, { pages })}
-              onRemoveSaved={handleRemoveSaved} // ✅
+              onRemoveSaved={handleRemoveSaved}
             />
           ))}
 
@@ -361,6 +358,7 @@ function ProjectPage({ onLogout }: Props) {
             </label>
 
             <div className="buttons">
+              {/* Сохранить — сохраняет файлы на сервер */}
               <button
                 className="btn secondary"
                 onClick={async () => {
@@ -375,6 +373,7 @@ function ProjectPage({ onLogout }: Props) {
                 {isSaving ? "Сохранение..." : "Сохранить"}
               </button>
 
+              {/* Записать — активна только если стоит галочка и нет загрузки */}
               <button
                 className="btn primary"
                 disabled={!completed || isUploading || isSaving}

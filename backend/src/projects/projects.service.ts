@@ -81,14 +81,25 @@ export class ProjectsService {
   }
 
   // ✅ FIX: originalName + УБРАН null
+  // сохраняет метаданные только НОВЫХ файлов — не трогает уже сохранённые
   async saveTempPhotos(
     projectId: number,
     photos: { section: string; defectType?: string; originalName: string; order: number }[],
   ) {
-    await this.prisma.projectPhoto.deleteMany({ where: { projectId } });
+    // фильтруем только новые — те у которых ещё нет записи в БД
+    const existing = await this.prisma.projectPhoto.findMany({
+      where: { projectId },
+      select: { originalName: true },
+    });
+
+    const existingNames = new Set(existing.map(p => p.originalName));
+
+    const newPhotos = photos.filter(p => !existingNames.has(p.originalName));
+
+    if (!newPhotos.length) return;
 
     return this.prisma.projectPhoto.createMany({
-      data: photos.map(p => ({
+      data: newPhotos.map(p => ({
         projectId,
         section: p.section,
         defectType: p.defectType,
