@@ -250,7 +250,7 @@ export default function Dashboard({ onLogout }: Props) {
           {sorted.map((project) => (
             <div
               key={project.id}
-              className={showArchive ? "" : "project-card clickable"}
+              className={showArchive ? "project-card" : "project-card clickable"}
               onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
             >
               <div className="project-card-header">
