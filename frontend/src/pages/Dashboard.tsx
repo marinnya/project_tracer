@@ -277,6 +277,13 @@ export default function Dashboard({ onLogout }: Props) {
                   )}
                 </div>
               </div>
+
+              <div className="project-responsible">
+                <img src="/responsible.png" alt="Ответственный" />
+                <span>{project.responsible}</span>
+              </div>
+
+              
             </div>
           ))}
         </div>
