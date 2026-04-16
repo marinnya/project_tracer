@@ -157,5 +157,13 @@ export class ProjectsController {
     return this.projectService.updateDates(projectId, body.startDate, body.endDate);
   }
 
+  @Patch(':id/defects')
+  async saveDefects(
+    @Param('id', ParseIntPipe) projectId: number,
+    @Body() body: { defects: any[] },
+  ) {
+    return this.projectService.saveDefects(projectId, body.defects);
+  }
+  
   
 }

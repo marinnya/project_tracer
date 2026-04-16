@@ -100,29 +100,58 @@ function ProjectPage({ onLogout }: Props) {
 
 
   useEffect(() => {
+    if (!id) return;
+
+    api.get(`/projects/${id}/defects`)
+      .then(res => {
+        setDefects(res.data.map((d: any) => ({
+          id: d.id,
+          typeId: d.typeId,
+          typeName: "", // можно маппить из справочника
+          pages: d.pages ?? "",
+          files: [],
+        })));
+      });
+  }, [id]);
+
+  // 👉 синхронизация дефектов с сохранёнными фото (ВАЖНО ДЛЯ ВОССТАНОВЛЕНИЯ СОСТОЯНИЯ)
+  useEffect(() => {
     if (!savedPhotos.length) return;
 
-    const defectMap = new Map<string, Defect>();
+    setDefects(prev => {
+      // если дефекты уже есть — просто обогащаем typeName
+      if (prev.length) {
+        return prev.map(d => {
+          const match = savedPhotos.find(
+            p => p.section === "дефекты" && p.defectType
+          );
 
-    savedPhotos
-      .filter(p => p.section === "дефекты")
-      .forEach(p => {
-        if (!p.defectType) return;
+          return {
+            ...d,
+            typeName: d.typeName || match?.defectType || "",
+          };
+        });
+      }
 
-        if (!defectMap.has(p.defectType)) {
-          defectMap.set(p.defectType, {
-            id: Date.now() + Math.random(),
-            typeId: "",
-            typeName: p.defectType,
-            pages: "",
-            files: [],
-          });
-        }
-      });
+      // если дефектов ещё нет (первый вход) — создаём из savedPhotos
+      const map = new Map<string, Defect>();
 
-    if (defectMap.size) {
-      setDefects(Array.from(defectMap.values()));
-    }
+      savedPhotos
+        .filter(p => p.section === "дефекты" && p.defectType)
+        .forEach(p => {
+          if (!map.has(p.defectType!)) {
+            map.set(p.defectType!, {
+              id: Date.now() + Math.random(),
+              typeId: "",
+              typeName: p.defectType || "",
+              pages: "",
+              files: [],
+            });
+          }
+        });
+
+      return Array.from(map.values());
+    });
   }, [savedPhotos]);
 
 

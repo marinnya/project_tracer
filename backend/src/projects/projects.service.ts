@@ -362,4 +362,27 @@ export class ProjectsService {
       folderUrl: project.folderUrl,
     });
   }
+
+  async getDefects(projectId: number) {
+    return this.prisma.defect.findMany({
+      where: { projectId },
+      orderBy: { id: 'asc' },
+    });
+  }
+
+  async saveDefects(projectId: number, defects: {
+    id?: number;
+    typeId: number;
+    pages: number;
+  }[]) {
+    await this.prisma.defect.deleteMany({ where: { projectId } });
+
+    return this.prisma.defect.createMany({
+      data: defects.map(d => ({
+        projectId,
+        typeId: d.typeId,
+        pages: d.pages,
+      })),
+    });
+  }
 }
