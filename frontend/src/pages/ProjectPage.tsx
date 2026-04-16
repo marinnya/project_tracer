@@ -135,27 +135,41 @@ function ProjectPage({ onLogout }: Props) {
       order: number;
     }[] = [];
 
+    // обычные секции
     for (const title of SECTIONS) {
       const newFiles = sections[title].files;
       const saved = savedPhotos
         .filter(p => p.section === title)
         .sort((a, b) => a.order - b.order);
 
-      // сначала сохранённые
       saved.forEach(p => {
         photosMeta.push({ section: title, originalName: p.originalName, order: p.order });
       });
 
-      // потом новые — нумерация продолжается после сохранённых
       newFiles.forEach((file, i) => {
         photosMeta.push({ section: title, originalName: file.name, order: saved.length + i + 1 });
       });
     }
 
+    // дефекты — для каждого дефекта сначала сохранённые потом новые
     for (const d of defects) {
-      if (!d.typeName || !d.files.length) continue;
+      if (!d.typeName) continue;
+
+      const savedDefectPhotos = savedPhotos
+        .filter(p => p.section === "дефекты" && p.defectType === d.typeName)
+        .sort((a, b) => a.order - b.order);
+
+      savedDefectPhotos.forEach(p => {
+        photosMeta.push({ section: "дефекты", defectType: d.typeName, originalName: p.originalName, order: p.order });
+      });
+
       d.files.forEach((file, i) => {
-        photosMeta.push({ section: "дефекты", defectType: d.typeName, originalName: file.name, order: i + 1 });
+        photosMeta.push({
+          section: "дефекты",
+          defectType: d.typeName,
+          originalName: file.name,
+          order: savedDefectPhotos.length + i + 1
+        });
       });
     }
 
@@ -175,11 +189,12 @@ function ProjectPage({ onLogout }: Props) {
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
-      // отправляем только новые файлы
+      // отправляем только новые файлы секций
       for (const title of SECTIONS) {
         sections[title].files.forEach(file => formData.append("files", file));
       }
 
+      // отправляем только новые файлы дефектов
       for (const d of defects) {
         if (!d.typeName || !d.files.length) continue;
         d.files.forEach(file => formData.append("files", file));
@@ -194,12 +209,16 @@ function ProjectPage({ onLogout }: Props) {
       const res = await api.get(`/projects/${id}/photos`);
       setSavedPhotos(res.data);
 
-      // очищаем новые файлы — они теперь в savedPhotos
+      // очищаем новые файлы секций — они теперь в savedPhotos
       setSections(prev =>
         Object.fromEntries(
           SECTIONS.map(title => [title, { ...prev[title], files: [] }])
         )
       );
+
+      // очищаем новые файлы дефектов — они теперь в savedPhotos
+      setDefects(prev => prev.map(d => ({ ...d, files: [] })));
+
       setDeletedPhotoIds([]);
 
     } catch {
@@ -212,7 +231,7 @@ function ProjectPage({ onLogout }: Props) {
   const handleFinalSubmit = async () => {
     setError(null);
 
-    // валидация — учитываем сохранённые и новые файлы
+    // валидация обычных секций — учитываем сохранённые и новые файлы
     for (const title of SECTIONS) {
       const s = sections[title];
       const savedCount = savedPhotos.filter(p => p.section === title).length;
@@ -224,10 +243,16 @@ function ProjectPage({ onLogout }: Props) {
       }
     }
 
+    // валидация дефектов — учитываем сохранённые и новые файлы
     for (const d of defects) {
       if (!d.typeId || !d.pages) continue;
-      if (d.files.length !== Number(d.pages)) {
-        setError(`Дефект №${defects.indexOf(d) + 1}: выбрано ${d.files.length} файлов, а указано ${d.pages}`);
+      const savedCount = savedPhotos.filter(
+        p => p.section === "дефекты" && p.defectType === d.typeName
+      ).length;
+      const totalFiles = d.files.length + savedCount;
+
+      if (totalFiles !== Number(d.pages)) {
+        setError(`Дефект №${defects.indexOf(d) + 1}: выбрано ${totalFiles} файлов, а указано ${d.pages}`);
         return;
       }
     }

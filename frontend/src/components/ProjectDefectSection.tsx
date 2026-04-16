@@ -1,12 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 
-// Типы дефекта
 type DefectType = {
   id: number;
   name: string;
 };
 
-// Тип одного дефекта
 type Defect = {
   id: number;
   typeId: number | "";
@@ -41,6 +39,25 @@ const defectTypes: DefectType[] = [
 
 const pageOptions = Array.from({ length: 11 }, (_, i) => i);
 
+// вспомогательная функция для объединения сохранённых и новых файлов дефекта
+function getDefectFiles(
+  defect: Defect,
+  savedPhotos: SavedPhoto[]
+) {
+  const saved = savedPhotos
+    .filter(p => p.section === "дефекты" && p.defectType === defect.typeName)
+    .sort((a, b) => a.order - b.order)
+    .map(p => ({ id: p.id, name: p.originalName, isSaved: true as const }));
+
+  const newFiles = defect.files.map(f => ({
+    id: undefined as number | undefined,
+    name: f.name,
+    isSaved: false as const,
+  }));
+
+  return [...saved, ...newFiles];
+}
+
 function ProjectDefectSection({
   title,
   defects,
@@ -48,6 +65,7 @@ function ProjectDefectSection({
   onDefectsChange,
   onRemoveSaved,
 }: Props) {
+  // состояние раскрытия для каждого дефекта по его id
   const [expandedMap, setExpandedMap] = useState<Record<number, boolean>>({});
 
   const updateDefect = (id: number, patch: Partial<Omit<Defect, "id">>) => {
@@ -60,7 +78,6 @@ function ProjectDefectSection({
       alert("Заполните тип дефекта и количество страниц");
       return;
     }
-
     onDefectsChange([
       ...defects,
       { id: Date.now(), typeId: "", typeName: "", pages: "", files: [] },
@@ -72,6 +89,7 @@ function ProjectDefectSection({
     onDefectsChange(defects.filter(d => d.id !== id));
   };
 
+  // добавление файлов с уникализацией имён
   const handleAddFiles = (defect: Defect, newFiles: FileList) => {
     const existing = [
       ...savedPhotos
@@ -87,6 +105,7 @@ function ProjectDefectSection({
       const ext = name.includes(".") ? "." + name.split(".").pop() : "";
       const base = name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name;
 
+      // если имя занято — добавляем (1), (2) и т.д.
       if (existing.includes(name)) {
         let counter = 1;
         while (existing.includes(`${base} (${counter})${ext}`)) {
@@ -102,47 +121,27 @@ function ProjectDefectSection({
     updateDefect(defect.id, { files: result });
   };
 
+  const removeNewFile = (defectId: number, fileName: string) => {
+    const defect = defects.find(d => d.id === defectId);
+    if (!defect) return;
+    updateDefect(defectId, { files: defect.files.filter(f => f.name !== fileName) });
+  };
+
   return (
     <div className="project-section">
       <h3>{title}</h3>
 
       {defects.map((defect, index) => {
-        const allFiles = useMemo(() => {
-          const saved = savedPhotos
-            .filter(
-              p => p.section === "дефекты" && p.defectType === defect.typeName
-            )
-            .sort((a, b) => a.order - b.order)
-            .map(p => ({
-              id: p.id,
-              name: p.originalName,
-              isSaved: true as const,
-            }));
-
-          const newFiles = defect.files.map(f => ({
-            id: undefined,
-            name: f.name,
-            isSaved: false as const,
-          }));
-
-          return [...saved, ...newFiles];
-        }, [savedPhotos, defect]);
-
-        const removeNewFile = (name: string) => {
-          updateDefect(defect.id, {
-            files: defect.files.filter(f => f.name !== name),
-          });
-        };
+        // вычисляем список файлов без useMemo — обычная функция
+        const allFiles = getDefectFiles(defect, savedPhotos);
+        const isExpanded = expandedMap[defect.id] ?? false;
 
         return (
           <div key={defect.id} className="windows defect-card">
             <div className="defect-header">
               <span>№{index + 1}</span>
               {defects.length > 1 && (
-                <button
-                  className="delete-btn"
-                  onClick={() => removeDefect(defect.id)}
-                >
+                <button className="delete-btn" onClick={() => removeDefect(defect.id)}>
                   ✕
                 </button>
               )}
@@ -154,9 +153,7 @@ function ProjectDefectSection({
               <select
                 value={defect.typeId}
                 onChange={e => {
-                  const selected = defectTypes.find(
-                    d => d.id === Number(e.target.value)
-                  );
+                  const selected = defectTypes.find(d => d.id === Number(e.target.value));
                   updateDefect(defect.id, {
                     typeId: Number(e.target.value) || "",
                     typeName: selected?.name ?? "",
@@ -165,33 +162,27 @@ function ProjectDefectSection({
               >
                 <option value="">Выберите тип дефекта</option>
                 {defectTypes.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
+                  <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
             </div>
 
-            {/* Страницы */}
+            {/* Количество страниц */}
             <div className="section-row">
               <label>Количество страниц*</label>
               <select
                 value={defect.pages}
                 onChange={e =>
-                  updateDefect(defect.id, {
-                    pages: Number(e.target.value) || "",
-                  })
+                  updateDefect(defect.id, { pages: Number(e.target.value) || "" })
                 }
               >
                 {pageOptions.map(n => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
+                  <option key={n} value={n}>{n}</option>
                 ))}
               </select>
             </div>
 
-            {/* Upload */}
+            {/* Загрузка файлов */}
             <input
               id={`defect-upload-${defect.id}`}
               type="file"
@@ -205,51 +196,40 @@ function ProjectDefectSection({
               }}
             />
 
-            <label
-              htmlFor={`defect-upload-${defect.id}`}
-              className="file-row-defect"
-            >
+            <label htmlFor={`defect-upload-${defect.id}`} className="file-row-defect">
               <img src="/clip.png" alt="attach" />
-              <span>
-                Выберите файлы (до 10 Мб)
-                {allFiles.length > 0 && ` — всего: ${allFiles.length}`}
-              </span>
+              <span>Выберите файлы (до 10 Мб)</span>
             </label>
 
-            {/* FILE LIST */}
+            {/* Список файлов — скрыт по умолчанию */}
             {allFiles.length > 0 && (
               <ul className="file-list">
-                {expandedMap[defect.id] &&
-                  allFiles.map((item, i) => (
-                    <li key={`${item.name}-${i}`} className="file-item">
-                      <span className="file-name">{item.name}</span>
-                      <button
-                        className="file-remove"
-                        onClick={() => {
-                          if (item.isSaved) {
-                            onRemoveSaved(item.id!);
-                          } else {
-                            removeNewFile(item.name);
-                          }
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </li>
-                  ))}
+                {isExpanded && allFiles.map((item, i) => (
+                  <li key={`${item.name}-${i}`} className="file-item">
+                    <span className="file-name">{item.name}</span>
+                    <button
+                      className="file-remove"
+                      onClick={() => {
+                        if (item.isSaved) {
+                          onRemoveSaved(item.id!);
+                        } else {
+                          removeNewFile(defect.id, item.name);
+                        }
+                      }}
+                      title="Удалить файл"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
 
                 <button
                   className="file-list-toggle"
                   onClick={() =>
-                    setExpandedMap(prev => ({
-                      ...prev,
-                      [defect.id]: !prev[defect.id],
-                    }))
+                    setExpandedMap(prev => ({ ...prev, [defect.id]: !prev[defect.id] }))
                   }
                 >
-                  {expandedMap[defect.id]
-                    ? "Свернуть"
-                    : `Показать все (${allFiles.length})`}
+                  {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
                 </button>
               </ul>
             )}
