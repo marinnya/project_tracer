@@ -261,24 +261,22 @@ export default function Dashboard({ onLogout }: Props) {
                 <div className="project-dates">
                   {formatDate(project.startDate)} – {formatDate(project.endDate)}
                 </div>
-                <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
-                  {project.status}
-                </span>
-              </div>
 
-              <div className="project-responsible">
-                <img src="/responsible.png" alt="Ответственный" />
-                <span>{project.responsible}</span>
-              </div>
+                <div className="status-actions">
+                  <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
+                    {project.status}
+                  </span>
 
-              {showArchive && role === "ADMIN" && (
-                <span
-                  className="status edit"
-                  onClick={(e) => handleUnarchive(e, project.id)}
-                >
-                  Вернуть из архива
-                </span>
-              )}
+                  {showArchive && role === "ADMIN" && (
+                    <span
+                      className="status edit"
+                      onClick={(e) => handleUnarchive(e, project.id)}
+                    >
+                      Вернуть
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           ))}
         </div>
