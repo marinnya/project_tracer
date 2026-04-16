@@ -66,7 +66,7 @@ function ProjectDefectSection({
   onRemoveSaved,
 }: Props) {
   // состояние раскрытия для каждого дефекта по его id
-  const [expandedMap, setExpandedMap] = useState<Record<number, boolean>>({});
+  const [expandedMap, setExpandedMap] = useState<Record<number, boolean>>(() => ({}));
 
   const updateDefect = (id: number, patch: Partial<Omit<Defect, "id">>) => {
     onDefectsChange(defects.map(d => (d.id === id ? { ...d, ...patch } : d)));
@@ -229,7 +229,7 @@ function ProjectDefectSection({
                     setExpandedMap(prev => ({ ...prev, [defect.id]: !prev[defect.id] }))
                   }
                 >
-                  {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
+                  {isExpanded ? "Свернуть" : "Показать"}
                 </button>
               </ul>
             )}

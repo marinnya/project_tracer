@@ -54,15 +54,18 @@ model User {
 model ProjectPhoto {
   id           Int      @id @default(autoincrement())
   projectId    Int
-  section      String   // название секции
-  defectType   String?  // только для дефектов
-  originalName String   // исходное имя файла — для отображения пользователю
-  filename     String?  // переименованное имя — заполняется после загрузки на Яндекс.Диск
-  yandexPath   String?  // полный путь на Яндекс.Диске — заполняется после загрузки
-  order        Int      // порядковый номер внутри секции
+
+  section      String?   // для обычных секций
+  defectId     Int?      // 👈 ВАЖНО
+
+  originalName String
+  filename     String?
+  yandexPath   String?
+  order        Int
   createdAt    DateTime @default(now())
 
   project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  defect       Defect?  @relation(fields: [defectId], references: [id], onDelete: Cascade)
 }
 
 // Черновик — хранит состояние формы пока сотрудник не нажал "Записать"
@@ -85,4 +88,15 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id])
+}
+
+
+model Defect {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  typeId    Int
+  pages     Int
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  photos    ProjectPhoto[]
 }

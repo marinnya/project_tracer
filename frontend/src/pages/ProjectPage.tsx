@@ -81,9 +81,7 @@ function ProjectPage({ onLogout }: Props) {
     Object.fromEntries(SECTIONS.map(s => [s, { files: [], pages: 0 }]))
   );
 
-  const [defects, setDefects] = useState<Defect[]>([
-    { id: Date.now(), typeId: "", typeName: "", pages: "", files: [] }
-  ]);
+  const [defects, setDefects] = useState<Defect[]>([]);
 
   // загружаем проект и сохранённые фото при открытии страницы
   useEffect(() => {
@@ -99,6 +97,34 @@ function ProjectPage({ onLogout }: Props) {
       .then(res => setSavedPhotos(res.data))
       .catch(() => setSavedPhotos([]));
   }, [id]);
+
+
+  useEffect(() => {
+    if (!savedPhotos.length) return;
+
+    const defectMap = new Map<string, Defect>();
+
+    savedPhotos
+      .filter(p => p.section === "дефекты")
+      .forEach(p => {
+        if (!p.defectType) return;
+
+        if (!defectMap.has(p.defectType)) {
+          defectMap.set(p.defectType, {
+            id: Date.now() + Math.random(),
+            typeId: "",
+            typeName: p.defectType,
+            pages: "",
+            files: [],
+          });
+        }
+      });
+
+    if (defectMap.size) {
+      setDefects(Array.from(defectMap.values()));
+    }
+  }, [savedPhotos]);
+
 
   if (!project) return <div>Проект не найден</div>;
 
