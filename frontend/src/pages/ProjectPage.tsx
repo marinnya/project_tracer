@@ -154,6 +154,60 @@ function ProjectPage({ onLogout }: Props) {
     });
   }, [savedPhotos]);
 
+  useEffect(() => {
+  if (!id) return;
+
+  api.get(`/projects/${id}/defects`)
+    .then(res => {
+      setDefects(res.data.map((d: any) => ({
+        id: d.id,
+        typeId: d.typeId,
+        typeName: d.typeName ?? "", // 👈 ВАЖНО (если есть на бэке)
+        pages: d.pages ?? "",
+        files: [],
+      })));
+    });
+}, [id]);
+
+// 🔥 НОВОЕ: нормальная синхронизация savedPhotos → defects
+useEffect(() => {
+  if (!savedPhotos.length) return;
+
+  setDefects(prev => {
+    if (!prev.length) {
+      const map = new Map<number, Defect>();
+
+      savedPhotos
+        .filter(p => p.section === "дефекты" && p.defectType)
+        .forEach(p => {
+          const key = p.defectType!;
+
+          if (![...map.values()].some(d => d.typeName === key)) {
+            map.set(Date.now() + Math.random(), {
+              id: Date.now() + Math.random(),
+              typeId: "",
+              typeName: key,
+              pages: "",
+              files: [],
+            });
+          }
+        });
+
+      return Array.from(map.values());
+    }
+
+    return prev.map(d => ({
+      ...d,
+      typeName:
+        d.typeName ||
+        savedPhotos.find(
+          p => p.section === "дефекты" && p.defectType
+        )?.defectType ||
+        "",
+    }));
+  });
+}, [savedPhotos]);
+
 
   if (!project) return <div>Проект не найден</div>;
 
@@ -186,6 +240,7 @@ function ProjectPage({ onLogout }: Props) {
     const photosMeta: {
       section: string;
       defectType?: string;
+      defectId?: number;
       originalName: string;
       order: number;
     }[] = [];
