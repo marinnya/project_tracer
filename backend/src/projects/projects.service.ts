@@ -40,20 +40,19 @@ export class ProjectsService {
     return { Authorization: `OAuth ${process.env.YANDEX_TOKEN}` };
   }
 
-  // ✅ FIX: this.sectionKeyMap
   private getRenamedFilename(
     originalName: string,
-    section: string,
-    defectType: string | undefined,
+    section: string | null,
+    defectTypeName: string | undefined,
     order: number
   ): string {
     const ext = originalName.split('.').pop() ?? 'jpg';
 
-    if (section === 'дефекты' && defectType) {
-      return `${defectType.toLowerCase()}${order}.${ext}`;
+    if (defectTypeName) {
+      return `${defectTypeName.toLowerCase()}${order}.${ext}`;
     }
 
-    const prefix = this.sectionKeyMap[section] ?? section.toLowerCase();
+    const prefix = this.sectionKeyMap[section ?? ''] ?? (section ?? 'файл').toLowerCase();
     return `${prefix}${order}.${ext}`;
   }
 
@@ -67,33 +66,76 @@ export class ProjectsService {
     } catch (e: unknown) {
       const err = e as { response?: { status?: number; data?: unknown }; message?: string };
       if (err.response?.status === 409) return;
-      console.error('Яндекс ответил:', err.response?.status, JSON.stringify(err.response?.data));
       throw new InternalServerErrorException(`Ошибка создания папки: ${err.message}`);
     }
   }
 
-  // ✅ используется контроллером
+  // получить фото обычных секций проекта
   async getProjectPhotos(projectId: number) {
     return this.prisma.projectPhoto.findMany({
-      where: { projectId },
+      where: { projectId, defectId: null },
       orderBy: [{ section: 'asc' }, { order: 'asc' }],
     });
   }
 
-  // ✅ FIX: originalName + УБРАН null
-  // сохраняет метаданные только НОВЫХ файлов — не трогает уже сохранённые
+  // получить дефекты проекта с их фото
+  async getDefects(projectId: number) {
+    return this.prisma.defect.findMany({
+      where: { projectId },
+      include: {
+        photos: {
+          orderBy: { order: 'asc' },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+  }
+
+  // сохранить/обновить дефекты проекта
+  async saveDefects(projectId: number, defects: {
+    id?: number;
+    typeId: number;
+    typeName: string;
+    pages: number;
+  }[]) {
+    // получаем существующие дефекты
+    const existing = await this.prisma.defect.findMany({ where: { projectId } });
+    const existingIds = new Set(existing.map(d => d.id));
+
+    for (const d of defects) {
+      if (d.id && existingIds.has(d.id)) {
+        // обновляем существующий
+        await this.prisma.defect.update({
+          where: { id: d.id },
+          data: { typeId: d.typeId, typeName: d.typeName, pages: d.pages },
+        });
+      } else {
+        // создаём новый
+        await this.prisma.defect.create({
+          data: { projectId, typeId: d.typeId, typeName: d.typeName, pages: d.pages },
+        });
+      }
+    }
+
+    // удаляем дефекты которых больше нет
+    const incomingIds = new Set(defects.filter(d => d.id).map(d => d.id!));
+    const toDelete = existing.filter(d => !incomingIds.has(d.id)).map(d => d.id);
+    if (toDelete.length) {
+      await this.prisma.defect.deleteMany({ where: { id: { in: toDelete } } });
+    }
+  }
+
+  // сохраняет метаданные новых фото секций (без дефектов)
   async saveTempPhotos(
     projectId: number,
-    photos: { section: string; defectType?: string; originalName: string; order: number }[],
+    photos: { section: string; originalName: string; order: number }[],
   ) {
-    // фильтруем только новые — те у которых ещё нет записи в БД
     const existing = await this.prisma.projectPhoto.findMany({
-      where: { projectId },
+      where: { projectId, defectId: null },
       select: { originalName: true },
     });
 
     const existingNames = new Set(existing.map(p => p.originalName));
-
     const newPhotos = photos.filter(p => !existingNames.has(p.originalName));
 
     if (!newPhotos.length) return;
@@ -102,7 +144,6 @@ export class ProjectsService {
       data: newPhotos.map(p => ({
         projectId,
         section: p.section,
-        defectType: p.defectType,
         originalName: p.originalName,
         order: p.order,
         filename: null,
@@ -111,12 +152,38 @@ export class ProjectsService {
     });
   }
 
-  // ✅ FIX: originalName вместо filename
+  // сохраняет метаданные новых фото дефекта
+  async saveTempDefectPhotos(
+    defectId: number,
+    projectId: number,
+    photos: { originalName: string; order: number }[],
+  ) {
+    const existing = await this.prisma.projectPhoto.findMany({
+      where: { defectId },
+      select: { originalName: true },
+    });
+
+    const existingNames = new Set(existing.map(p => p.originalName));
+    const newPhotos = photos.filter(p => !existingNames.has(p.originalName));
+
+    if (!newPhotos.length) return;
+
+    return this.prisma.projectPhoto.createMany({
+      data: newPhotos.map(p => ({
+        projectId,
+        defectId,
+        originalName: p.originalName,
+        order: p.order,
+        filename: null,
+        yandexPath: null,
+      })),
+    });
+  }
+
   async readTempFiles(
     tmpDir: string,
-    photos: { originalName: string; section: string; order: number; defectType?: string }[],
+    photos: { originalName: string }[],
   ): Promise<Express.Multer.File[]> {
-
     if (!fs.existsSync(tmpDir)) {
       throw new InternalServerErrorException(
         'Временная папка не найдена — сначала нажмите "Сохранить"'
@@ -141,24 +208,32 @@ export class ProjectsService {
     });
   }
 
-  // ✅ ТВОЯ ЛОГИКА БЕЗ ИЗМЕНЕНИЙ (batch сохранён)
   async uploadToYandex(
     files: UploadFile[],
     projectName: string,
-    photos: { section: string; originalName: string; order: number; defectType?: string }[],
+    photos: {
+      originalName: string;
+      section: string | null;
+      defectTypeName?: string;
+      order: number;
+    }[],
   ): Promise<{ message: string; folderUrl: string; renamedPhotos: { originalName: string; filename: string }[] }> {
 
     await this.createFolder(projectName);
 
-    const sections = [...new Set(photos.map(p => p.section))];
-    await Promise.all(sections.map(section => this.createFolder(`${projectName}/${section}`)));
+    // создаём папки для секций и для дефектов
+    const folders = new Set<string>();
+    photos.forEach(p => {
+      folders.add(p.section ?? 'дефекты');
+    });
+    await Promise.all([...folders].map(f => this.createFolder(`${projectName}/${f}`)));
 
-    const photoMap = new Map<string, { section: string; order: number; defectType?: string }>();
+    const photoMap = new Map<string, { section: string | null; order: number; defectTypeName?: string }>();
     for (const photo of photos) {
       photoMap.set(photo.originalName, {
         section: photo.section,
         order: photo.order,
-        defectType: photo.defectType,
+        defectTypeName: photo.defectTypeName,
       });
     }
 
@@ -170,22 +245,16 @@ export class ProjectsService {
       await Promise.all(
         batch.map(file => {
           const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-
           const meta = photoMap.get(originalName);
-          const section = meta?.section ?? 'прочее';
+          const section = meta?.section ?? 'дефекты';
           const order = meta?.order ?? i + 1;
-          const defectType = meta?.defectType;
+          const defectTypeName = meta?.defectTypeName;
 
-          const renamedFilename = this.getRenamedFilename(originalName, section, defectType, order);
-
+          const renamedFilename = this.getRenamedFilename(originalName, section, defectTypeName, order);
           renamedPhotos.push({ originalName, filename: renamedFilename });
 
           const folderPath = `${projectName}/${section}`;
-
-          const renamedFile = {
-            ...file,
-            originalname: Buffer.from(renamedFilename).toString('latin1'),
-          };
+          const renamedFile = { ...file, originalname: Buffer.from(renamedFilename).toString('latin1') };
 
           return this.uploadFile(renamedFile, folderPath).catch((e: unknown) => {
             const message = e instanceof Error ? e.message : String(e);
@@ -196,26 +265,24 @@ export class ProjectsService {
     }
 
     const folderUrl = await this.getPublicUrl(projectName);
-
-    return {
-      message: 'Файлы успешно загружены',
-      folderUrl,
-      renamedPhotos,
-    };
+    return { message: 'Файлы успешно загружены', folderUrl, renamedPhotos };
   }
 
   async savePhotos(
     projectId: number,
     photos: {
-      section: string;
-      defectType?: string;
+      section: string | null;
+      defectId?: number | null;
       originalName: string;
       filename: string;
       yandexPath: string;
       order: number;
     }[]
   ) {
-    await this.prisma.projectPhoto.deleteMany({ where: { projectId } });
+    // удаляем старые фото секций (не дефектов)
+    await this.prisma.projectPhoto.deleteMany({
+      where: { projectId, defectId: null },
+    });
 
     return this.prisma.projectPhoto.createMany({
       data: photos.map(p => ({ ...p, projectId })),
@@ -232,7 +299,6 @@ export class ProjectsService {
     );
 
     const fileBuffer = file.buffer ?? fs.readFileSync(file.path!);
-
     await axios.put(data.href, fileBuffer, {
       headers: { 'Content-Type': file.mimetype },
     });
@@ -241,21 +307,11 @@ export class ProjectsService {
   private async getPublicUrl(folderName: string): Promise<string> {
     const encodedPath = encodeURIComponent(folderName);
 
-    await axios.put(
-      `${this.baseUrl}/publish?path=${encodedPath}`,
-      undefined,
-      { headers: this.getHeaders() },
-    );
-
-    const { data } = await axios.get(
-      `${this.baseUrl}?path=${encodedPath}`,
-      { headers: this.getHeaders() },
-    );
+    await axios.put(`${this.baseUrl}/publish?path=${encodedPath}`, undefined, { headers: this.getHeaders() });
+    const { data } = await axios.get(`${this.baseUrl}?path=${encodedPath}`, { headers: this.getHeaders() });
 
     return data.public_url;
   }
-
-  // дальше ВООБЩЕ НЕ ТРОГАЛ
 
   async saveDraft(projectId: number, sectionsState: Record<string, { pages: number }>) {
     return this.prisma.projectDraft.upsert({
@@ -276,44 +332,29 @@ export class ProjectsService {
     return this.prisma.project.findUnique({ where: { id: projectId } });
   }
 
-  /* для удаления фото*/
   async deletePhotos(photoIds: number[]) {
     if (!photoIds?.length) return;
-
-    return this.prisma.projectPhoto.deleteMany({
-      where: { id: { in: photoIds } },
-    });
+    return this.prisma.projectPhoto.deleteMany({ where: { id: { in: photoIds } } });
   }
 
   async archiveProject(projectId: number) {
     return this.prisma.project.update({
       where: { id: projectId },
-      data: {
-        status: 'Завершен',
-        archivedAt: new Date(),
-      },
+      data: { status: 'Завершен', archivedAt: new Date() },
     });
   }
 
   async unarchiveProject(projectId: number) {
     return this.prisma.project.update({
       where: { id: projectId },
-      data: {
-        status: 'В работе',
-        archivedAt: null,
-      },
+      data: { status: 'В работе', archivedAt: null },
     });
   }
 
   async deleteOldArchivedProjects() {
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-
-    return this.prisma.project.deleteMany({
-      where: {
-        archivedAt: { lt: threeMonthsAgo },
-      },
-    });
+    return this.prisma.project.deleteMany({ where: { archivedAt: { lt: threeMonthsAgo } } });
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -323,19 +364,12 @@ export class ProjectsService {
   }
 
   async getAllProjects() {
-    return this.prisma.project.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.prisma.project.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
   async getProjectsForUser(user: User) {
-    if (user.role === 'ADMIN') {
-      return this.prisma.project.findMany();
-    }
-
-    return this.prisma.project.findMany({
-      where: { responsibleId: user.id },
-    });
+    if (user.role === 'ADMIN') return this.prisma.project.findMany();
+    return this.prisma.project.findMany({ where: { responsibleId: user.id } });
   }
 
   async updateDates(projectId: number, startDate: string | null, endDate: string | null) {
@@ -349,10 +383,7 @@ export class ProjectsService {
   }
 
   async sendProjectToOneC(projectId: number) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-    });
-
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project || !project.oneCId) return;
 
     await this.oneCService.sendProjectUpdate({
@@ -360,29 +391,6 @@ export class ProjectsService {
       startDate: project.startDate,
       endDate: project.endDate,
       folderUrl: project.folderUrl,
-    });
-  }
-
-  async getDefects(projectId: number) {
-    return this.prisma.defect.findMany({
-      where: { projectId },
-      orderBy: { id: 'asc' },
-    });
-  }
-
-  async saveDefects(projectId: number, defects: {
-    id?: number;
-    typeId: number;
-    pages: number;
-  }[]) {
-    await this.prisma.defect.deleteMany({ where: { projectId } });
-
-    return this.prisma.defect.createMany({
-      data: defects.map(d => ({
-        projectId,
-        typeId: d.typeId,
-        pages: d.pages,
-      })),
     });
   }
 }

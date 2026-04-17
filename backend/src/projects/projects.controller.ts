@@ -28,20 +28,25 @@ export class ProjectsController {
 
   constructor(private readonly projectService: ProjectsService) {}
 
-  // ✅ получить фото проекта
+  // получить фото обычных секций проекта
   @Get(':id/photos')
   async getPhotos(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getProjectPhotos(projectId);
   }
 
-  // ✅ Сохранить (черновик)
+  // получить дефекты проекта с фото
+  @Get(':id/defects')
+  async getDefects(@Param('id', ParseIntPipe) projectId: number) {
+    return this.projectService.getDefects(projectId);
+  }
+
+  // сохранить черновик — файлы секций и дефектов во временную папку
   @Patch(':id/save')
   @UseInterceptors(FilesInterceptor('files', 200, {
     storage: diskStorage({
       destination: (req, file, cb) => {
         const projectId = String(req.params.id);
         const uploadPath = path.join(process.cwd(), 'uploads', 'tmp', projectId);
-
         fs.mkdirSync(uploadPath, { recursive: true });
         cb(null, uploadPath);
       },
@@ -54,34 +59,65 @@ export class ProjectsController {
   async saveDraft(
     @Param('id', ParseIntPipe) projectId: number,
     @UploadedFiles() files: Express.Multer.File[],
-    @Body() body: { sections: string; photos: string; deletedPhotos?: string },
+    @Body() body: {
+      sections: string;
+      sectionPhotos: string;
+      defects: string;
+      deletedPhotos?: string;
+    },
   ) {
     this.logger.log(`Сохранение черновика. projectId: ${projectId}`);
 
-    const sections = JSON.parse(body.sections);
+    // сохраняем количество страниц секций
+    const sections = JSON.parse(body.sections) as Record<string, { pages: number }>;
     await this.projectService.saveDraft(projectId, sections);
 
-    // ✅ удаление сохранённых
-    const deletedPhotos = JSON.parse(body.deletedPhotos || "[]");
+    // удаляем помеченные фото
+    const deletedPhotos = JSON.parse(body.deletedPhotos ?? '[]') as number[];
     if (deletedPhotos.length) {
       await this.projectService.deletePhotos(deletedPhotos);
     }
 
-    if (files?.length && body.photos) {
-      const photos = JSON.parse(body.photos) as {
+    // сохраняем/обновляем дефекты
+    const defects = JSON.parse(body.defects) as {
+      id?: number;
+      typeId: number;
+      typeName: string;
+      pages: number;
+      newPhotos: { originalName: string; order: number }[];
+    }[];
+
+    await this.projectService.saveDefects(projectId, defects);
+
+    // получаем актуальные дефекты из БД чтобы знать их id
+    const savedDefects = await this.projectService.getDefects(projectId);
+
+    // сохраняем новые фото дефектов
+    for (const d of defects) {
+      if (!d.newPhotos?.length) continue;
+      // находим соответствующий дефект в БД по typeId и typeName
+      const savedDefect = savedDefects.find(
+        sd => sd.typeId === d.typeId && sd.typeName === d.typeName
+      );
+      if (!savedDefect) continue;
+
+      await this.projectService.saveTempDefectPhotos(savedDefect.id, projectId, d.newPhotos);
+    }
+
+    // сохраняем новые фото обычных секций
+    if (body.sectionPhotos) {
+      const sectionPhotos = JSON.parse(body.sectionPhotos) as {
         section: string;
-        defectType?: string;
         originalName: string;
         order: number;
       }[];
-
-      await this.projectService.saveTempPhotos(projectId, photos);
+      await this.projectService.saveTempPhotos(projectId, sectionPhotos);
     }
 
     return { message: 'Черновик сохранён' };
   }
 
-  // ✅ Загрузка на Яндекс
+  // загрузка на Яндекс.Диск
   @Post(':id/upload')
   async uploadFiles(
     @Param('id', ParseIntPipe) projectId: number,
@@ -89,35 +125,33 @@ export class ProjectsController {
   ) {
     try {
       const photos = JSON.parse(body.photos) as {
-        section: string;
-        defectType?: string;
         originalName: string;
+        section: string | null;
+        defectTypeName?: string;
         order: number;
       }[];
 
       const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
-
       const files = await this.projectService.readTempFiles(tmpDir, photos);
 
-      const { folderUrl, renamedPhotos } =
-        await this.projectService.uploadToYandex(
-          files,
-          body.projectName,
-          photos,
-        );
-
-      const renamedMap = new Map(
-        renamedPhotos.map(r => [r.originalName, r.filename])
+      const { folderUrl, renamedPhotos } = await this.projectService.uploadToYandex(
+        files,
+        body.projectName,
+        photos,
       );
 
+      const renamedMap = new Map(renamedPhotos.map(r => [r.originalName, r.filename]));
+
       const photosWithPath = photos.map(p => ({
-        ...p,
+        section: p.section,
+        defectId: null,
+        originalName: p.originalName,
         filename: renamedMap.get(p.originalName) ?? p.originalName,
-        yandexPath: `${body.projectName}/${p.section}/${renamedMap.get(p.originalName) ?? p.originalName}`,
+        yandexPath: `${body.projectName}/${p.section ?? 'дефекты'}/${renamedMap.get(p.originalName) ?? p.originalName}`,
+        order: p.order,
       }));
 
       await this.projectService.savePhotos(projectId, photosWithPath);
-
       await this.projectService.saveFolderUrl(projectId, folderUrl);
       await this.projectService.archiveProject(projectId);
       await this.projectService.sendProjectToOneC(projectId);
@@ -125,8 +159,9 @@ export class ProjectsController {
       fs.rmSync(tmpDir, { recursive: true, force: true });
 
       return { message: 'Файлы загружены', folderUrl };
-    } catch (e: any) {
-      this.logger.error(e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.error(message);
       throw e;
     }
   }
@@ -140,8 +175,8 @@ export class ProjectsController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  async getAll(@Req() req) {
-    return this.projectService.getProjectsForUser(req.user);
+  async getAll(@Req() req: { user: { id: string; role: string } }) {
+    return this.projectService.getProjectsForUser(req.user as never);
   }
 
   @Get(':id')
@@ -156,14 +191,4 @@ export class ProjectsController {
   ) {
     return this.projectService.updateDates(projectId, body.startDate, body.endDate);
   }
-
-  @Patch(':id/defects')
-  async saveDefects(
-    @Param('id', ParseIntPipe) projectId: number,
-    @Body() body: { defects: any[] },
-  ) {
-    return this.projectService.saveDefects(projectId, body.defects);
-  }
-  
-  
 }

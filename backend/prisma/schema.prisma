@@ -12,24 +12,23 @@ enum Role {
   EMPLOYEE
 }
 
-
 model Project {
-  id                  Int       @id @default(autoincrement())
-  name                String
-  startDate           DateTime?
-  endDate             DateTime?
-  responsible         String
-  responsibleId       String?
-  oneCResponsibleId   String?   // ID ответственного сотрудника в 1С
-  oneCId              String?   @unique
-  status              String    @default("В работе")
-  archivedAt          DateTime?
-  createdAt           DateTime  @default(now())
-
-  folderUrl           String?   // ссылка на папку Яндекс.Диска
+  id                Int       @id @default(autoincrement())
+  name              String
+  startDate         DateTime?
+  endDate           DateTime?
+  responsible       String
+  responsibleId     String?
+  oneCResponsibleId String?
+  oneCId            String?   @unique
+  status            String    @default("В работе")
+  archivedAt        DateTime?
+  folderUrl         String?
+  createdAt         DateTime  @default(now())
 
   photos          ProjectPhoto[]
   draft           ProjectDraft?
+  defects         Defect[]
   responsibleUser User?   @relation(fields: [responsibleId], references: [id])
 }
 
@@ -48,55 +47,50 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   passwordResetTokens PasswordResetToken[]
-  projects            Project[]            // обратная связь
+  projects            Project[]
+}
+
+model Defect {
+  id        Int    @id @default(autoincrement())
+  projectId Int
+  typeId    Int    // id типа дефекта из справочника
+  typeName  String // название типа — для отображения
+  pages     Int    // количество страниц
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  photos  ProjectPhoto[]
 }
 
 model ProjectPhoto {
   id           Int      @id @default(autoincrement())
   projectId    Int
-
-  section      String?   // для обычных секций
-  defectId     Int?      // 👈 ВАЖНО
-
+  section      String?  // для обычных секций
+  defectId     Int?     // для фото дефектов
   originalName String
   filename     String?
   yandexPath   String?
   order        Int
   createdAt    DateTime @default(now())
 
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  defect       Defect?  @relation(fields: [defectId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  defect  Defect? @relation(fields: [defectId], references: [id], onDelete: Cascade)
 }
 
-// Черновик — хранит состояние формы пока сотрудник не нажал "Записать"
 model ProjectDraft {
-  id          Int      @id @default(autoincrement())
-  projectId   Int      @unique
-  sections    Json     // { "титульный": { pages: 3 }, ... }
-  updatedAt   DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  projectId Int      @unique
+  sections  Json
+  updatedAt DateTime @updatedAt
 
-  project     Project  @relation(fields: [projectId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
-
-// новая таблица для токенов восстановления
 model PasswordResetToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique
   userId    String
-  expiresAt DateTime // токен живёт 1 час
+  expiresAt DateTime
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-}
-
-
-model Defect {
-  id        Int      @id @default(autoincrement())
-  projectId Int
-  typeId    Int
-  pages     Int
-
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  photos    ProjectPhoto[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

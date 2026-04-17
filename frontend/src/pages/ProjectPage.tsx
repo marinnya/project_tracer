@@ -22,20 +22,31 @@ type SectionState = {
   pages: number;
 };
 
-type Defect = {
+// дефект с его фото из БД
+type SavedDefect = {
   id: number;
+  typeId: number;
+  typeName: string;
+  pages: number;
+  photos: SavedPhoto[];
+};
+
+// фото обычной секции из БД
+type SavedPhoto = {
+  id: number;
+  section: string | null;
+  defectId: number | null;
+  originalName: string;
+  order: number;
+};
+
+// дефект в состоянии фронта
+type Defect = {
+  id: number;         // если > 0 — есть в БД, если < 0 — новый (не сохранён)
   typeId: number | "";
   typeName: string;
   pages: number | "";
-  files: File[];
-};
-
-type SavedPhoto = {
-  id: number;
-  section: string;
-  defectType?: string;
-  originalName: string;
-  order: number;
+  files: File[];      // только новые файлы которые ещё не сохранены
 };
 
 type Props = {
@@ -72,19 +83,26 @@ function ProjectPage({ onLogout }: Props) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // сохранённые фото из БД
+  // фото обычных секций из БД
   const [savedPhotos, setSavedPhotos] = useState<SavedPhoto[]>([]);
-  // id фото которые пользователь удалил — отправляем на бэкенд при сохранении
+  // дефекты из БД (с их фото)
+  const [savedDefects, setSavedDefects] = useState<SavedDefect[]>([]);
+  // id фото которые удалил пользователь
   const [deletedPhotoIds, setDeletedPhotoIds] = useState<number[]>([]);
 
   const [sections, setSections] = useState<Record<string, SectionState>>(
     Object.fromEntries(SECTIONS.map(s => [s, { files: [], pages: 0 }]))
   );
 
-  const [defects, setDefects] = useState<Defect[]>([]);
+  // дефекты в состоянии фронта — инициализируются из savedDefects
+  const [defects, setDefects] = useState<Defect[]>([
+    { id: -Date.now(), typeId: "", typeName: "", pages: "", files: [] }
+  ]);
 
-  // загружаем проект и сохранённые фото при открытии страницы
   useEffect(() => {
+    if (!id) return;
+
+    // загружаем проект
     api.get(`/projects/${id}`)
       .then(res => {
         setProject(res.data);
@@ -93,121 +111,30 @@ function ProjectPage({ onLogout }: Props) {
       })
       .catch(() => setProject(null));
 
+    // загружаем фото секций
     api.get(`/projects/${id}/photos`)
       .then(res => setSavedPhotos(res.data))
       .catch(() => setSavedPhotos([]));
-  }, [id]);
 
-
-  useEffect(() => {
-    if (!id) return;
-
+    // загружаем дефекты с их фото
     api.get(`/projects/${id}/defects`)
       .then(res => {
-        setDefects(res.data.map((d: any) => ({
-          id: d.id,
-          typeId: d.typeId,
-          typeName: "", // можно маппить из справочника
-          pages: d.pages ?? "",
-          files: [],
-        })));
-      });
+        const loaded: SavedDefect[] = res.data;
+        setSavedDefects(loaded);
+
+        if (loaded.length > 0) {
+          // восстанавливаем дефекты из БД
+          setDefects(loaded.map(d => ({
+            id: d.id,
+            typeId: d.typeId,
+            typeName: d.typeName,
+            pages: d.pages,
+            files: [],
+          })));
+        }
+      })
+      .catch(() => setSavedDefects([]));
   }, [id]);
-
-  // 👉 синхронизация дефектов с сохранёнными фото (ВАЖНО ДЛЯ ВОССТАНОВЛЕНИЯ СОСТОЯНИЯ)
-  useEffect(() => {
-    if (!savedPhotos.length) return;
-
-    setDefects(prev => {
-      // если дефекты уже есть — просто обогащаем typeName
-      if (prev.length) {
-        return prev.map(d => {
-          const match = savedPhotos.find(
-            p => p.section === "дефекты" && p.defectType
-          );
-
-          return {
-            ...d,
-            typeName: d.typeName || match?.defectType || "",
-          };
-        });
-      }
-
-      // если дефектов ещё нет (первый вход) — создаём из savedPhotos
-      const map = new Map<string, Defect>();
-
-      savedPhotos
-        .filter(p => p.section === "дефекты" && p.defectType)
-        .forEach(p => {
-          if (!map.has(p.defectType!)) {
-            map.set(p.defectType!, {
-              id: Date.now() + Math.random(),
-              typeId: "",
-              typeName: p.defectType || "",
-              pages: "",
-              files: [],
-            });
-          }
-        });
-
-      return Array.from(map.values());
-    });
-  }, [savedPhotos]);
-
-  useEffect(() => {
-  if (!id) return;
-
-  api.get(`/projects/${id}/defects`)
-    .then(res => {
-      setDefects(res.data.map((d: any) => ({
-        id: d.id,
-        typeId: d.typeId,
-        typeName: d.typeName ?? "", // 👈 ВАЖНО (если есть на бэке)
-        pages: d.pages ?? "",
-        files: [],
-      })));
-    });
-}, [id]);
-
-// 🔥 НОВОЕ: нормальная синхронизация savedPhotos → defects
-useEffect(() => {
-  if (!savedPhotos.length) return;
-
-  setDefects(prev => {
-    if (!prev.length) {
-      const map = new Map<number, Defect>();
-
-      savedPhotos
-        .filter(p => p.section === "дефекты" && p.defectType)
-        .forEach(p => {
-          const key = p.defectType!;
-
-          if (![...map.values()].some(d => d.typeName === key)) {
-            map.set(Date.now() + Math.random(), {
-              id: Date.now() + Math.random(),
-              typeId: "",
-              typeName: key,
-              pages: "",
-              files: [],
-            });
-          }
-        });
-
-      return Array.from(map.values());
-    }
-
-    return prev.map(d => ({
-      ...d,
-      typeName:
-        d.typeName ||
-        savedPhotos.find(
-          p => p.section === "дефекты" && p.defectType
-        )?.defectType ||
-        "",
-    }));
-  });
-}, [savedPhotos]);
-
 
   if (!project) return <div>Проект не найден</div>;
 
@@ -229,64 +156,70 @@ useEffect(() => {
     }));
   };
 
-  // удаление сохранённого фото — помечаем для удаления на бэкенде
-  const handleRemoveSaved = (photoId: number) => {
+  // удаление сохранённого фото секции
+  const handleRemoveSavedPhoto = (photoId: number) => {
     setDeletedPhotoIds(prev => [...prev, photoId]);
     setSavedPhotos(prev => prev.filter(p => p.id !== photoId));
   };
 
-  // собирает метаданные фото — сначала сохранённые, потом новые
-  const buildPhotosMeta = () => {
-    const photosMeta: {
-      section: string;
-      defectType?: string;
-      defectId?: number;
-      originalName: string;
-      order: number;
-    }[] = [];
+  // удаление сохранённого фото дефекта
+  const handleRemoveSavedDefectPhoto = (photoId: number) => {
+    setDeletedPhotoIds(prev => [...prev, photoId]);
+    setSavedDefects(prev => prev.map(d => ({
+      ...d,
+      photos: d.photos.filter(p => p.id !== photoId),
+    })));
+  };
 
-    // обычные секции
+  // собирает метаданные фото секций
+  const buildSectionPhotosMeta = () => {
+    const meta: { section: string; originalName: string; order: number }[] = [];
+
     for (const title of SECTIONS) {
-      const newFiles = sections[title].files;
       const saved = savedPhotos
         .filter(p => p.section === title)
         .sort((a, b) => a.order - b.order);
 
-      saved.forEach(p => {
-        photosMeta.push({ section: title, originalName: p.originalName, order: p.order });
-      });
+      saved.forEach(p => meta.push({ section: title, originalName: p.originalName, order: p.order }));
 
-      newFiles.forEach((file, i) => {
-        photosMeta.push({ section: title, originalName: file.name, order: saved.length + i + 1 });
+      sections[title].files.forEach((file, i) => {
+        meta.push({ section: title, originalName: file.name, order: saved.length + i + 1 });
       });
     }
 
-    // дефекты — для каждого дефекта сначала сохранённые потом новые
-    for (const d of defects) {
-      if (!d.typeName) continue;
-
-      const savedDefectPhotos = savedPhotos
-        .filter(p => p.section === "дефекты" && p.defectType === d.typeName)
-        .sort((a, b) => a.order - b.order);
-
-      savedDefectPhotos.forEach(p => {
-        photosMeta.push({ section: "дефекты", defectType: d.typeName, originalName: p.originalName, order: p.order });
-      });
-
-      d.files.forEach((file, i) => {
-        photosMeta.push({
-          section: "дефекты",
-          defectType: d.typeName,
-          originalName: file.name,
-          order: savedDefectPhotos.length + i + 1
-        });
-      });
-    }
-
-    return photosMeta;
+    return meta;
   };
 
-  // кнопка "Сохранить"
+  // собирает метаданные всех фото для загрузки на Яндекс.Диск
+  const buildAllPhotosForUpload = () => {
+    const meta: { originalName: string; section: string | null; defectTypeName?: string; order: number }[] = [];
+
+    // секции
+    for (const title of SECTIONS) {
+      const saved = savedPhotos.filter(p => p.section === title).sort((a, b) => a.order - b.order);
+      saved.forEach(p => meta.push({ originalName: p.originalName, section: title, order: p.order }));
+      sections[title].files.forEach((file, i) => {
+        meta.push({ originalName: file.name, section: title, order: saved.length + i + 1 });
+      });
+    }
+
+    // дефекты
+    for (const d of defects) {
+      if (!d.typeName) continue;
+      const savedDef = savedDefects.find(sd => sd.id === d.id);
+      const savedDefPhotos = savedDef?.photos.sort((a, b) => a.order - b.order) ?? [];
+
+      savedDefPhotos.forEach(p => {
+        meta.push({ originalName: p.originalName, section: 'дефекты', defectTypeName: d.typeName, order: p.order });
+      });
+      d.files.forEach((file, i) => {
+        meta.push({ originalName: file.name, section: 'дефекты', defectTypeName: d.typeName, order: savedDefPhotos.length + i + 1 });
+      });
+    }
+
+    return meta;
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
@@ -294,41 +227,64 @@ useEffect(() => {
     try {
       const formData = new FormData();
 
+      // количество страниц секций
       const sectionsState = Object.fromEntries(
         SECTIONS.map(title => [title, { pages: sections[title].pages }])
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
-      // отправляем только новые файлы секций
+      // новые файлы секций
       for (const title of SECTIONS) {
         sections[title].files.forEach(file => formData.append("files", file));
       }
 
-      // отправляем только новые файлы дефектов
+      // новые файлы дефектов
       for (const d of defects) {
-        if (!d.typeName || !d.files.length) continue;
         d.files.forEach(file => formData.append("files", file));
       }
 
-      formData.append("photos", JSON.stringify(buildPhotosMeta()));
+      // метаданные фото секций
+      formData.append("sectionPhotos", JSON.stringify(buildSectionPhotosMeta()));
+
+      // дефекты с их новыми фото
+      const defectsData = defects.map(d => ({
+        id: d.id > 0 ? d.id : undefined, // передаём id только если дефект уже в БД
+        typeId: d.typeId,
+        typeName: d.typeName,
+        pages: d.pages,
+        newPhotos: d.files.map((file, i) => {
+          const savedDef = savedDefects.find(sd => sd.id === d.id);
+          const savedCount = savedDef?.photos.length ?? 0;
+          return { originalName: file.name, order: savedCount + i + 1 };
+        }),
+      }));
+      formData.append("defects", JSON.stringify(defectsData));
       formData.append("deletedPhotos", JSON.stringify(deletedPhotoIds));
 
       await api.patch(`/projects/${id}/save`, formData);
 
-      // обновляем сохранённые фото из БД
-      const res = await api.get(`/projects/${id}/photos`);
-      setSavedPhotos(res.data);
+      // обновляем данные из БД
+      const [photosRes, defectsRes] = await Promise.all([
+        api.get(`/projects/${id}/photos`),
+        api.get(`/projects/${id}/defects`),
+      ]);
 
-      // очищаем новые файлы секций — они теперь в savedPhotos
+      setSavedPhotos(photosRes.data);
+      const loadedDefects: SavedDefect[] = defectsRes.data;
+      setSavedDefects(loadedDefects);
+
+      // синхронизируем id дефектов в состоянии фронта
+      setDefects(prev => prev.map(d => {
+        if (d.id > 0) return { ...d, files: [] };
+        // для нового дефекта ищем его в загруженных по typeName
+        const found = loadedDefects.find(sd => sd.typeName === d.typeName);
+        return found ? { ...d, id: found.id, files: [] } : { ...d, files: [] };
+      }));
+
+      // очищаем файлы секций
       setSections(prev =>
-        Object.fromEntries(
-          SECTIONS.map(title => [title, { ...prev[title], files: [] }])
-        )
+        Object.fromEntries(SECTIONS.map(title => [title, { ...prev[title], files: [] }]))
       );
-
-      // очищаем новые файлы дефектов — они теперь в savedPhotos
-      setDefects(prev => prev.map(d => ({ ...d, files: [] })));
-
       setDeletedPhotoIds([]);
 
     } catch {
@@ -341,7 +297,7 @@ useEffect(() => {
   const handleFinalSubmit = async () => {
     setError(null);
 
-    // валидация обычных секций — учитываем сохранённые и новые файлы
+    // валидация секций
     for (const title of SECTIONS) {
       const s = sections[title];
       const savedCount = savedPhotos.filter(p => p.section === title).length;
@@ -353,12 +309,11 @@ useEffect(() => {
       }
     }
 
-    // валидация дефектов — учитываем сохранённые и новые файлы
+    // валидация дефектов
     for (const d of defects) {
       if (!d.typeId || !d.pages) continue;
-      const savedCount = savedPhotos.filter(
-        p => p.section === "дефекты" && p.defectType === d.typeName
-      ).length;
+      const savedDef = savedDefects.find(sd => sd.id === d.id);
+      const savedCount = savedDef?.photos.length ?? 0;
       const totalFiles = d.files.length + savedCount;
 
       if (totalFiles !== Number(d.pages)) {
@@ -371,21 +326,17 @@ useEffect(() => {
       setIsUploading(true);
       setUploadProgress(0);
 
-      // сохраняем перед загрузкой на Яндекс.Диск
       await handleSave();
 
       await api.post(
         `/projects/${id}/upload`,
         {
           projectName: project.name,
-          photos: JSON.stringify(buildPhotosMeta()),
+          photos: JSON.stringify(buildAllPhotosForUpload()),
         },
         {
           onUploadProgress: (progressEvent) => {
-            const percent = Math.round(
-              (progressEvent.loaded * 100) / (progressEvent.total ?? 1)
-            );
-            // 70% — отправка на сервер, остальные 30% — загрузка на Яндекс.Диск
+            const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total ?? 1));
             setUploadProgress(Math.min(percent, 70));
           },
         }
@@ -431,10 +382,7 @@ useEffect(() => {
                 <input
                   type="date"
                   value={startDate}
-                  onChange={e => {
-                    setStartDate(e.target.value);
-                    handleDatesUpdate(e.target.value, endDate);
-                  }}
+                  onChange={e => { setStartDate(e.target.value); handleDatesUpdate(e.target.value, endDate); }}
                 />
               </div>
               <div className="date-field">
@@ -442,10 +390,7 @@ useEffect(() => {
                 <input
                   type="date"
                   value={endDate}
-                  onChange={e => {
-                    setEndDate(e.target.value);
-                    handleDatesUpdate(startDate, e.target.value);
-                  }}
+                  onChange={e => { setEndDate(e.target.value); handleDatesUpdate(startDate, e.target.value); }}
                 />
               </div>
             </div>
@@ -462,16 +407,16 @@ useEffect(() => {
                 .sort((a, b) => a.order - b.order)}
               onFilesChange={(files) => updateSection(title, { files })}
               onPagesChange={(pages) => updateSection(title, { pages })}
-              onRemoveSaved={handleRemoveSaved}
+              onRemoveSaved={handleRemoveSavedPhoto}
             />
           ))}
 
           <ProjectDefectSection
             title="Фотографии дефектов"
             defects={defects}
-            savedPhotos={savedPhotos}
+            savedDefects={savedDefects}
             onDefectsChange={setDefects}
-            onRemoveSaved={handleRemoveSaved}
+            onRemoveSavedPhoto={handleRemoveSavedDefectPhoto}
           />
 
           {error && <p className="error">{error}</p>}
@@ -487,30 +432,21 @@ useEffect(() => {
 
           <div className="project-footer">
             <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={completed}
-                onChange={e => setCompleted(e.target.checked)} />
+              <input type="checkbox" checked={completed} onChange={e => setCompleted(e.target.checked)} />
               <span>Работы завершены в полном объеме?</span>
             </label>
 
             <div className="buttons">
-              {/* Сохранить — сохраняет файлы на сервер */}
               <button
                 className="btn secondary"
                 onClick={async () => {
-                  try {
-                    await handleSave();
-                    alert("Данные сохранены");
-                  } catch (e: unknown) {
-                    alert(e instanceof Error ? e.message : "Ошибка сохранения");
-                  }
+                  try { await handleSave(); alert("Данные сохранены"); }
+                  catch (e: unknown) { alert(e instanceof Error ? e.message : "Ошибка сохранения"); }
                 }}
                 disabled={isUploading || isSaving}>
                 {isSaving ? "Сохранение..." : "Сохранить"}
               </button>
 
-              {/* Записать — активна только если стоит галочка и нет загрузки */}
               <button
                 className="btn primary"
                 disabled={!completed || isUploading || isSaving}
@@ -520,12 +456,7 @@ useEffect(() => {
             </div>
 
             {showModal && (
-              <SuccessModal
-                onClose={() => {
-                  setShowModal(false);
-                  navigate("/");
-                }}
-              />
+              <SuccessModal onClose={() => { setShowModal(false); navigate("/"); }} />
             )}
           </div>
 
