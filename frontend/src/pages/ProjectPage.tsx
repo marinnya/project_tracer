@@ -22,7 +22,6 @@ type SectionState = {
   pages: number;
 };
 
-// дефект с его фото из БД
 type SavedDefect = {
   id: number;
   typeId: number;
@@ -31,7 +30,6 @@ type SavedDefect = {
   photos: SavedPhoto[];
 };
 
-// фото обычной секции из БД
 type SavedPhoto = {
   id: number;
   section: string | null;
@@ -40,13 +38,12 @@ type SavedPhoto = {
   order: number;
 };
 
-// дефект в состоянии фронта
 type Defect = {
-  id: number;         // если > 0 — есть в БД, если < 0 — новый (не сохранён)
+  id: number;
   typeId: number | "";
   typeName: string;
   pages: number | "";
-  files: File[];      // только новые файлы которые ещё не сохранены
+  files: File[];
 };
 
 type Props = {
@@ -83,18 +80,14 @@ function ProjectPage({ onLogout }: Props) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // фото обычных секций из БД
   const [savedPhotos, setSavedPhotos] = useState<SavedPhoto[]>([]);
-  // дефекты из БД (с их фото)
   const [savedDefects, setSavedDefects] = useState<SavedDefect[]>([]);
-  // id фото которые удалил пользователь
   const [deletedPhotoIds, setDeletedPhotoIds] = useState<number[]>([]);
 
   const [sections, setSections] = useState<Record<string, SectionState>>(
     Object.fromEntries(SECTIONS.map(s => [s, { files: [], pages: 0 }]))
   );
 
-  // дефекты в состоянии фронта — инициализируются из savedDefects
   const [defects, setDefects] = useState<Defect[]>([
     { id: -Date.now(), typeId: "", typeName: "", pages: "", files: [] }
   ]);
@@ -116,6 +109,23 @@ function ProjectPage({ onLogout }: Props) {
       .then(res => setSavedPhotos(res.data))
       .catch(() => setSavedPhotos([]));
 
+    // загружаем черновик — восстанавливаем количество страниц секций
+    api.get(`/projects/${id}/draft`)
+      .then(res => {
+        const draft = res.data as Record<string, { pages: number }> | null;
+        if (!draft) return;
+
+        setSections(prev =>
+          Object.fromEntries(
+            SECTIONS.map(title => [
+              title,
+              { ...prev[title], pages: draft[title]?.pages ?? 0 }
+            ])
+          )
+        );
+      })
+      .catch(() => {}); // черновика может не быть — это нормально
+
     // загружаем дефекты с их фото
     api.get(`/projects/${id}/defects`)
       .then(res => {
@@ -123,7 +133,6 @@ function ProjectPage({ onLogout }: Props) {
         setSavedDefects(loaded);
 
         if (loaded.length > 0) {
-          // восстанавливаем дефекты из БД
           setDefects(loaded.map(d => ({
             id: d.id,
             typeId: d.typeId,
@@ -156,13 +165,11 @@ function ProjectPage({ onLogout }: Props) {
     }));
   };
 
-  // удаление сохранённого фото секции
   const handleRemoveSavedPhoto = (photoId: number) => {
     setDeletedPhotoIds(prev => [...prev, photoId]);
     setSavedPhotos(prev => prev.filter(p => p.id !== photoId));
   };
 
-  // удаление сохранённого фото дефекта
   const handleRemoveSavedDefectPhoto = (photoId: number) => {
     setDeletedPhotoIds(prev => [...prev, photoId]);
     setSavedDefects(prev => prev.map(d => ({
@@ -171,7 +178,6 @@ function ProjectPage({ onLogout }: Props) {
     })));
   };
 
-  // собирает метаданные фото секций
   const buildSectionPhotosMeta = () => {
     const meta: { section: string; originalName: string; order: number }[] = [];
 
@@ -190,11 +196,9 @@ function ProjectPage({ onLogout }: Props) {
     return meta;
   };
 
-  // собирает метаданные всех фото для загрузки на Яндекс.Диск
   const buildAllPhotosForUpload = () => {
     const meta: { originalName: string; section: string | null; defectTypeName?: string; order: number }[] = [];
 
-    // секции
     for (const title of SECTIONS) {
       const saved = savedPhotos.filter(p => p.section === title).sort((a, b) => a.order - b.order);
       saved.forEach(p => meta.push({ originalName: p.originalName, section: title, order: p.order }));
@@ -203,7 +207,6 @@ function ProjectPage({ onLogout }: Props) {
       });
     }
 
-    // дефекты
     for (const d of defects) {
       if (!d.typeName) continue;
       const savedDef = savedDefects.find(sd => sd.id === d.id);
@@ -227,28 +230,23 @@ function ProjectPage({ onLogout }: Props) {
     try {
       const formData = new FormData();
 
-      // количество страниц секций
       const sectionsState = Object.fromEntries(
         SECTIONS.map(title => [title, { pages: sections[title].pages }])
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
-      // новые файлы секций
       for (const title of SECTIONS) {
         sections[title].files.forEach(file => formData.append("files", file));
       }
 
-      // новые файлы дефектов
       for (const d of defects) {
         d.files.forEach(file => formData.append("files", file));
       }
 
-      // метаданные фото секций
       formData.append("sectionPhotos", JSON.stringify(buildSectionPhotosMeta()));
 
-      // дефекты с их новыми фото
       const defectsData = defects.map(d => ({
-        id: d.id > 0 ? d.id : undefined, // передаём id только если дефект уже в БД
+        id: d.id > 0 ? d.id : undefined,
         typeId: d.typeId,
         typeName: d.typeName,
         pages: d.pages,
@@ -263,7 +261,6 @@ function ProjectPage({ onLogout }: Props) {
 
       await api.patch(`/projects/${id}/save`, formData);
 
-      // обновляем данные из БД
       const [photosRes, defectsRes] = await Promise.all([
         api.get(`/projects/${id}/photos`),
         api.get(`/projects/${id}/defects`),
@@ -273,15 +270,12 @@ function ProjectPage({ onLogout }: Props) {
       const loadedDefects: SavedDefect[] = defectsRes.data;
       setSavedDefects(loadedDefects);
 
-      // синхронизируем id дефектов в состоянии фронта
       setDefects(prev => prev.map(d => {
         if (d.id > 0) return { ...d, files: [] };
-        // для нового дефекта ищем его в загруженных по typeName
         const found = loadedDefects.find(sd => sd.typeName === d.typeName);
         return found ? { ...d, id: found.id, files: [] } : { ...d, files: [] };
       }));
 
-      // очищаем файлы секций
       setSections(prev =>
         Object.fromEntries(SECTIONS.map(title => [title, { ...prev[title], files: [] }]))
       );
@@ -297,7 +291,6 @@ function ProjectPage({ onLogout }: Props) {
   const handleFinalSubmit = async () => {
     setError(null);
 
-    // валидация секций
     for (const title of SECTIONS) {
       const s = sections[title];
       const savedCount = savedPhotos.filter(p => p.section === title).length;
@@ -309,7 +302,6 @@ function ProjectPage({ onLogout }: Props) {
       }
     }
 
-    // валидация дефектов
     for (const d of defects) {
       if (!d.typeId || !d.pages) continue;
       const savedDef = savedDefects.find(sd => sd.id === d.id);
@@ -381,7 +373,7 @@ function ProjectPage({ onLogout }: Props) {
                 <label>Дата начала</label>
                 <input
                   type="date"
-                  value={startDate} disabled
+                  value={startDate}
                   onChange={e => { setStartDate(e.target.value); handleDatesUpdate(e.target.value, endDate); }}
                 />
               </div>

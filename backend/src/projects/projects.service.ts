@@ -393,4 +393,13 @@ export class ProjectsService {
       folderUrl: project.folderUrl,
     });
   }
+
+  // возвращает сохранённые данные черновика — количество страниц секций
+  async getDraft(projectId: number) {
+    const draft = await this.prisma.projectDraft.findUnique({
+      where: { projectId },
+    });
+    // возвращаем sections или null если черновика ещё нет
+    return draft?.sections ?? null;
+  }
 }

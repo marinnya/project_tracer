@@ -191,4 +191,10 @@ export class ProjectsController {
   ) {
     return this.projectService.updateDates(projectId, body.startDate, body.endDate);
   }
+
+  // получить черновик проекта — для восстановления количества страниц
+  @Get(':id/draft')
+  async getDraft(@Param('id', ParseIntPipe) projectId: number) {
+    return this.projectService.getDraft(projectId);
+  }
 }
