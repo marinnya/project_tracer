@@ -147,7 +147,7 @@
   color: #777;
   font-size: 14px;
   cursor: pointer;
-  margin-bottom: 12px;
+  /*margin-bottom: 12px;*/
 }
 
 
@@ -495,7 +495,7 @@ input[type="checkbox"] {
 /* адаптация — перенос на маленьких экранах */
 @media (max-width: 906px) {
   .defect-row {
-    gap: 5px 20px;
+    gap: 12px 20px;
     flex-wrap: wrap;
     align-items: baseline;
   }
@@ -506,6 +506,7 @@ input[type="checkbox"] {
     display: none;
   }
 }
+
 
 /*.project-header {
   display: flex;
@@ -673,6 +674,23 @@ input[type="checkbox"] {
 .file-row {
   font-size: 13px;
 }
+}
+
+@media (max-width: 385px) {
+  .defect-row {
+    gap: 12px 20px;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+
+  .defect-number {
+    width: 100%; /* занимает всю строку — остальные переносятся на следующую */
+  }
+
+  .section-row-defect,
+  .section-row {
+    flex-wrap: nowrap; /* не разрываем label и select */
+  }
 }
 
 
