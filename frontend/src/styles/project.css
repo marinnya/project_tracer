@@ -502,14 +502,20 @@ input[type="checkbox"] {
 }
 
 /* показать все фото дефекта*/
-.file-list-wrapper {
+.file-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  width: 100%;
+  padding: 0;
+  margin: 8px 0 0 0;
+  list-style: none;
 }
 
 .file-list-toggle {
-  align-self: flex-start; /* или center / stretch */
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  text-align: left;
 }
 
 

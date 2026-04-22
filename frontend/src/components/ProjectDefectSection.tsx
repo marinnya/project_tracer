@@ -188,7 +188,6 @@ function ProjectDefectSection({
 
             {/* Список файлов — скрыт по умолчанию */}
             {allFiles.length > 0 && (
-            <div className="file-list-wrapper">
               <ul className="file-list">
                 {isExpanded && allFiles.map((item, i) => (
                   <li key={`${item.name}-${i}`} className="file-item">
@@ -208,21 +207,15 @@ function ProjectDefectSection({
                     </button>
                   </li>
                 ))}
-              </ul>
 
-              <button
-                className="file-list-toggle"
-                onClick={() =>
-                  setExpandedMap(prev => ({
-                    ...prev,
-                    [defect.id]: !prev[defect.id],
-                  }))
-                }
-              >
-                {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
-              </button>
-            </div>
-          )}
+                <button
+                  className="file-list-toggle"
+                  onClick={() => setExpandedMap(prev => ({ ...prev, [defect.id]: !prev[defect.id] }))}
+                >
+                  {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
+                </button>
+              </ul>
+            )}
           </div>
         );
       })}
