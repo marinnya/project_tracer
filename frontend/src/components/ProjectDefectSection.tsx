@@ -125,15 +125,17 @@ function ProjectDefectSection({
 
         const isExpanded = expandedMap[defect.id] ?? false;
 
-        return (
-          <div key={defect.id} className="windows defect-card">
-            <div className="defect-header">
-              <span>№{index + 1}</span>
-              {defects.length > 1 && (
-                <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
-              )}
-            </div>
+      return (
+        <div key={defect.id} className="defect-card">
+          <div className="defect-header">
+            <span>№{index + 1}</span>
+            {defects.length > 1 && (
+              <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
+            )}
+          </div>
 
+          {/* все элементы в одну строку */}
+          <div className="defect-row">
             {/* Тип дефекта */}
             <div className="section-row-defect">
               <label>Тип дефекта*</label>
@@ -185,39 +187,40 @@ function ProjectDefectSection({
               <img src="/clip.png" alt="attach" />
               <span>Выберите файлы (до 10 Мб)</span>
             </label>
-
-            {/* Список файлов — скрыт по умолчанию */}
-            {allFiles.length > 0 && (
-              <ul className="file-list">
-                {isExpanded && allFiles.map((item, i) => (
-                  <li key={`${item.name}-${i}`} className="file-item">
-                    <span className="file-name">{item.name}</span>
-                    <button
-                      className="file-remove"
-                      onClick={() => {
-                        if (item.isSaved) {
-                          onRemoveSavedPhoto(item.id!);
-                        } else {
-                          removeNewFile(defect.id, item.name);
-                        }
-                      }}
-                      title="Удалить файл"
-                    >
-                      ✕
-                    </button>
-                  </li>
-                ))}
-
-                <button
-                  className="file-list-toggle"
-                  onClick={() => setExpandedMap(prev => ({ ...prev, [defect.id]: !prev[defect.id] }))}
-                >
-                  {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
-                </button>
-              </ul>
-            )}
           </div>
-        );
+
+          {/* список файлов — на отдельной строке под остальными элементами */}
+          {allFiles.length > 0 && (
+            <ul className="file-list">
+              {isExpanded && allFiles.map((item, i) => (
+                <li key={`${item.name}-${i}`} className="file-item">
+                  <span className="file-name">{item.name}</span>
+                  <button
+                    className="file-remove"
+                    onClick={() => {
+                      if (item.isSaved) {
+                        onRemoveSavedPhoto(item.id!);
+                      } else {
+                        removeNewFile(defect.id, item.name);
+                      }
+                    }}
+                    title="Удалить файл"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+
+              <button
+                className="file-list-toggle"
+                onClick={() => setExpandedMap(prev => ({ ...prev, [defect.id]: !prev[defect.id] }))}
+              >
+                {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
+              </button>
+            </ul>
+          )}
+        </div>
+      );
       })}
 
       <button className="add-defect-btn" onClick={addDefect}>
