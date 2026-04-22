@@ -125,102 +125,102 @@ function ProjectDefectSection({
 
         const isExpanded = expandedMap[defect.id] ?? false;
 
-      return (
-        <div key={defect.id} className="defect-card">
-          <div className="defect-header">
-            <span>№{index + 1}</span>
-            {defects.length > 1 && (
-              <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
+        return (
+          <div key={defect.id} className="defect-card">
+            <div className="defect-header">
+              <span>№{index + 1}</span>
+              {defects.length > 1 && (
+                <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
+              )}
+            </div>
+
+            {/* все элементы в одну строку */}
+            <div className="defect-row">
+              {/* Тип дефекта */}
+              <div className="section-row-defect">
+                <label>Тип дефекта*</label>
+                <select
+                  value={defect.typeId}
+                  onChange={e => {
+                    const selected = defectTypes.find(d => d.id === Number(e.target.value));
+                    updateDefect(defect.id, {
+                      typeId: Number(e.target.value) || "",
+                      typeName: selected?.name ?? "",
+                    });
+                  }}
+                >
+                  <option value="">Выберите тип дефекта</option>
+                  {defectTypes.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Количество страниц */}
+              <div className="section-row">
+                <label>Количество страниц*</label>
+                <select
+                  value={defect.pages}
+                  onChange={e => updateDefect(defect.id, { pages: Number(e.target.value) || "" })}
+                >
+                  {pageOptions.map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Загрузка файлов */}
+              <input
+                id={`defect-upload-${defect.id}`}
+                type="file"
+                multiple
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={e => {
+                  if (!e.target.files) return;
+                  handleAddFiles(defect, e.target.files);
+                  e.target.value = "";
+                }}
+              />
+
+              <label htmlFor={`defect-upload-${defect.id}`} className="file-row-defect">
+                <img src="/clip.png" alt="attach" />
+                <span>Выберите файлы (до 10 Мб)</span>
+              </label>
+            </div>
+
+            {/* список файлов — на отдельной строке под остальными элементами */}
+            {allFiles.length > 0 && (
+              <ul className="file-list">
+                {isExpanded && allFiles.map((item, i) => (
+                  <li key={`${item.name}-${i}`} className="file-item">
+                    <span className="file-name">{item.name}</span>
+                    <button
+                      className="file-remove"
+                      onClick={() => {
+                        if (item.isSaved) {
+                          onRemoveSavedPhoto(item.id!);
+                        } else {
+                          removeNewFile(defect.id, item.name);
+                        }
+                      }}
+                      title="Удалить файл"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+
+                <button
+                  className="file-list-toggle"
+                  onClick={() => setExpandedMap(prev => ({ ...prev, [defect.id]: !prev[defect.id] }))}
+                >
+                  {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
+                </button>
+              </ul>
             )}
           </div>
-
-          {/* все элементы в одну строку */}
-          <div className="defect-row">
-            {/* Тип дефекта */}
-            <div className="section-row-defect">
-              <label>Тип дефекта*</label>
-              <select
-                value={defect.typeId}
-                onChange={e => {
-                  const selected = defectTypes.find(d => d.id === Number(e.target.value));
-                  updateDefect(defect.id, {
-                    typeId: Number(e.target.value) || "",
-                    typeName: selected?.name ?? "",
-                  });
-                }}
-              >
-                <option value="">Выберите тип дефекта</option>
-                {defectTypes.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Количество страниц */}
-            <div className="section-row">
-              <label>Количество страниц*</label>
-              <select
-                value={defect.pages}
-                onChange={e => updateDefect(defect.id, { pages: Number(e.target.value) || "" })}
-              >
-                {pageOptions.map(n => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Загрузка файлов */}
-            <input
-              id={`defect-upload-${defect.id}`}
-              type="file"
-              multiple
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={e => {
-                if (!e.target.files) return;
-                handleAddFiles(defect, e.target.files);
-                e.target.value = "";
-              }}
-            />
-
-            <label htmlFor={`defect-upload-${defect.id}`} className="file-row-defect">
-              <img src="/clip.png" alt="attach" />
-              <span>Выберите файлы (до 10 Мб)</span>
-            </label>
-          </div>
-
-          {/* список файлов — на отдельной строке под остальными элементами */}
-          {allFiles.length > 0 && (
-            <ul className="file-list">
-              {isExpanded && allFiles.map((item, i) => (
-                <li key={`${item.name}-${i}`} className="file-item">
-                  <span className="file-name">{item.name}</span>
-                  <button
-                    className="file-remove"
-                    onClick={() => {
-                      if (item.isSaved) {
-                        onRemoveSavedPhoto(item.id!);
-                      } else {
-                        removeNewFile(defect.id, item.name);
-                      }
-                    }}
-                    title="Удалить файл"
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-
-              <button
-                className="file-list-toggle"
-                onClick={() => setExpandedMap(prev => ({ ...prev, [defect.id]: !prev[defect.id] }))}
-              >
-                {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
-              </button>
-            </ul>
-          )}
-        </div>
-      );
+        );
       })}
 
       <button className="add-defect-btn" onClick={addDefect}>

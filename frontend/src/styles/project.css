@@ -478,10 +478,33 @@ input[type="checkbox"] {
   color: #000;
 }
 
+
+
+.defect-number {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .defect-row {
   display: flex;
   align-items: center;
   gap: 45px;
+  flex-wrap: nowrap;
+}
+
+/* адаптация — перенос на маленьких экранах */
+@media (max-width: 906px) {
+  .defect-row {
+    gap: 5px 20px;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+}
+
+@media (max-width: 768px) {
+  .section-row-defect label {
+    display: none;
+  }
 }
 
 /*.project-header {
