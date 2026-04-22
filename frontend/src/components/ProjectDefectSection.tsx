@@ -113,11 +113,9 @@ function ProjectDefectSection({
       <h3>{title}</h3>
 
       {defects.map((defect, index) => {
-        // получаем сохранённые фото этого дефекта из БД
         const savedDef = savedDefects.find(sd => sd.id === defect.id);
         const savedPhotos = savedDef?.photos ?? [];
 
-        // объединяем сохранённые и новые файлы для отображения
         const allFiles = [
           ...savedPhotos.map(p => ({ id: p.id, name: p.originalName, isSaved: true as const })),
           ...defect.files.map(f => ({ id: undefined as number | undefined, name: f.name, isSaved: false as const })),
@@ -127,15 +125,11 @@ function ProjectDefectSection({
 
         return (
           <div key={defect.id} className="defect-card">
-            <div className="defect-header">
-              <span>№{index + 1}</span>
-              {defects.length > 1 && (
-                <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
-              )}
-            </div>
 
-            {/* все элементы в одну строку */}
+            {/* номер, поля и кнопка удаления — всё в одну строку */}
             <div className="defect-row">
+              <span className="defect-number">№{index + 1}</span>
+
               {/* Тип дефекта */}
               <div className="section-row-defect">
                 <label>Тип дефекта*</label>
@@ -187,6 +181,11 @@ function ProjectDefectSection({
                 <img src="/clip.png" alt="attach" />
                 <span>Выберите файлы (до 10 Мб)</span>
               </label>
+
+              {/* кнопка удаления в конце строки */}
+              {defects.length > 1 && (
+                <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
+              )}
             </div>
 
             {/* список файлов — на отдельной строке под остальными элементами */}
