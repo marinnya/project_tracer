@@ -151,7 +151,7 @@ function ProjectDefectSection({
               </div>
 
               {/* Количество страниц */}
-              <div className="section-row">
+              <div className="section-row-defect">
                 <label>Количество страниц*</label>
                 <select
                   value={defect.pages}
