@@ -501,6 +501,17 @@ input[type="checkbox"] {
   gap: 40px;
 }
 
+/* показать все фото дефекта*/
+.file-list-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-list-toggle {
+  align-self: flex-start; /* или center / stretch */
+}
+
 
 @media (max-width: 906px) {
   .windows {
