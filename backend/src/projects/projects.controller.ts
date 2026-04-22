@@ -78,14 +78,15 @@ export class ProjectsController {
       await this.projectService.deletePhotos(deletedPhotos);
     }
 
-    // сохраняем/обновляем дефекты
-    const defects = JSON.parse(body.defects) as {
+    
+    // сохраняем/обновляем дефекты — пропускаем незаполненные
+    const defects = (JSON.parse(body.defects) as {
       id?: number;
-      typeId: number;
+      typeId: number | string;
       typeName: string;
-      pages: number;
+      pages: number | string;
       newPhotos: { originalName: string; order: number }[];
-    }[];
+    }[]).filter(d => d.typeId !== "" && d.typeId !== null && Number(d.pages) > 0);
 
     await this.projectService.saveDefects(projectId, defects);
 

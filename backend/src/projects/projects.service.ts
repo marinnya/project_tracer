@@ -98,26 +98,28 @@ export class ProjectsService {
     typeName: string;
     pages: number;
   }[]) {
-    // получаем существующие дефекты
     const existing = await this.prisma.defect.findMany({ where: { projectId } });
     const existingIds = new Set(existing.map(d => d.id));
 
     for (const d of defects) {
+      const typeId = Number(d.typeId);
+      const pages = Number(d.pages);
+
+      // пропускаем если typeId или pages не валидны
+      if (!typeId || !pages) continue;
+
       if (d.id && existingIds.has(d.id)) {
-        // обновляем существующий
         await this.prisma.defect.update({
           where: { id: d.id },
-          data: { typeId: d.typeId, typeName: d.typeName, pages: d.pages },
+          data: { typeId, typeName: d.typeName, pages },
         });
       } else {
-        // создаём новый
         await this.prisma.defect.create({
-          data: { projectId, typeId: d.typeId, typeName: d.typeName, pages: d.pages },
+          data: { projectId, typeId, typeName: d.typeName, pages },
         });
       }
     }
 
-    // удаляем дефекты которых больше нет
     const incomingIds = new Set(defects.filter(d => d.id).map(d => d.id!));
     const toDelete = existing.filter(d => !incomingIds.has(d.id)).map(d => d.id);
     if (toDelete.length) {
