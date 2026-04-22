@@ -373,7 +373,7 @@ function ProjectPage({ onLogout }: Props) {
                 <label>Дата начала</label>
                 <input
                   type="date"
-                  value={startDate}
+                  value={startDate} disabled
                   onChange={e => { setStartDate(e.target.value); handleDatesUpdate(e.target.value, endDate); }}
                 />
               </div>
