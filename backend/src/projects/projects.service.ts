@@ -105,8 +105,9 @@ export class ProjectsService {
       const typeId = Number(d.typeId);
       const pages = Number(d.pages);
 
-      // пропускаем если typeId или pages не валидны
-      if (!typeId || !pages) continue;
+      // корректная проверка
+      if (!Number.isInteger(typeId) || typeId <= 0) continue;
+      if (!Number.isInteger(pages) || pages <= 0) continue;
 
       if (d.id && existingIds.has(d.id)) {
         await this.prisma.defect.update({

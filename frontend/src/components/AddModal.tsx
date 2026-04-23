@@ -12,6 +12,7 @@ type Props = {
     role: "ADMIN" | "EMPLOYEE";
     oneCId: string;
   }) => void;
+  existingOneCIds: string[]; // добавить
 };
 
 type OneCEmployee = {
@@ -42,7 +43,7 @@ const validatePassword = (password: string): boolean => {
 const PASSWORD_ERROR =
   "Пароль должен быть не менее 8 символов и содержать заглавную, строчную латинскую букву и цифру";
 
-export default function AddModal({ onClose, onSave }: Props) {
+export default function AddModal({ onClose, onSave, existingOneCIds }: Props) {
   const [selectedOneCId, setSelectedOneCId] = useState("");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
@@ -53,10 +54,16 @@ export default function AddModal({ onClose, onSave }: Props) {
   useEffect(() => {
     api
       .get("/users/onec-employees")
-      .then((res) => setEmployees(res.data))
+      .then((res) => {
+        // фильтруем тех кто уже добавлен в систему
+        const filtered = res.data.filter(
+          (emp: OneCEmployee) => !existingOneCIds.includes(emp.id)
+        );
+        setEmployees(filtered);
+      })
       .catch(() => setError("Не удалось загрузить список сотрудников"))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [existingOneCIds]);
 
   const handleSubmit = () => {
     setError("");

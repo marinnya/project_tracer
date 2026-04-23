@@ -17,6 +17,7 @@ type EmployeeData = {
   login: string;
   isBlocked: boolean;
   role: string;
+  oneCId: string | null; // добавить
 };
 
 // пропс onLogout передаётся из App.tsx и пробрасывается в Header
@@ -185,7 +186,11 @@ export default function EmployeesPage({ onLogout }: Props) {
           </div>
 
           {showModalAdd && (
-            <AddModal onClose={() => setShowModalAdd(false)} onSave={addEmployee} />
+            <AddModal
+              onClose={() => setShowModalAdd(false)}
+              onSave={addEmployee}
+              existingOneCIds={employees.map(e => e.oneCId).filter(Boolean) as string[]}
+            />
           )}
 
           <div className="filters desktop-only">
