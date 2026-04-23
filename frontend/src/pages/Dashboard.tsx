@@ -186,25 +186,27 @@ export default function Dashboard({ onLogout }: Props) {
                     className="th-sort-btn"
                     onClick={() => handleSort("name")}
                   >
-                    Наименование <SortArrow active={sortField === "name"} direction={sortDirection}/>
+                    Наименование <SortArrow field="name" />
                   </button>
                 </th>
+
                 <th>
                   <button
                     type="button"
                     className="th-sort-btn"
                     onClick={() => handleSort("startDate")}
                   >
-                    Дата начала <SortArrow active={sortField === "startDate"} direction={sortDirection} />
+                    Дата начала <SortArrow field="startDate" />
                   </button>
                 </th>
+
                 <th>
                   <button
                     type="button"
                     className="th-sort-btn"
                     onClick={() => handleSort("endDate")}
                   >
-                    Дата окончания <SortArrow active={sortField === "endDate"} direction={sortDirection} />
+                    Дата окончания <SortArrow field="endDate" />
                   </button>
                 </th>
                 <th>Ответственный</th>
