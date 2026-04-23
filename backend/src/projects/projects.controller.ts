@@ -140,6 +140,7 @@ export class ProjectsController {
         section: string | null;
         defectTypeName?: string;
         order: number;
+        yandexPath?: string | null; // добавить
       }[];
 
       // загружаем актуальные фото из БД — нужно знать у каких уже есть yandexPath
