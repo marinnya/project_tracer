@@ -159,8 +159,12 @@ export class ProjectsController {
 
       const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
 
+      this.logger.log(`Всего фото в запросе: ${photos.length}`);
+      this.logger.log(`Фото: ${JSON.stringify(photos.map(p => ({ name: p.originalName, section: p.section, hasYandex: !!p.yandexPath })))}`);
+
       // читаем только новые файлы
       const files = await this.projectService.readTempFiles(tmpDir, photosWithYandex);
+      this.logger.log(`Файлов для загрузки: ${files.length}`);
 
       const { folderUrl, renamedPhotos } = await this.projectService.uploadToYandex(
         files,
