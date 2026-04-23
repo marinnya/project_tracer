@@ -183,17 +183,24 @@ export class ProjectsService {
     });
   }
 
+  // читаем только НОВЫЕ файлы — те у которых ещё нет yandexPath
   async readTempFiles(
     tmpDir: string,
-    photos: { originalName: string }[],
+    photos: { originalName: string; yandexPath?: string | null }[],
   ): Promise<Express.Multer.File[]> {
+
+    // фильтруем только новые файлы
+    const newPhotos = photos.filter(p => !p.yandexPath);
+
+    if (!newPhotos.length) return [];
+
     if (!fs.existsSync(tmpDir)) {
       throw new InternalServerErrorException(
         'Временная папка не найдена — сначала нажмите "Сохранить"'
       );
     }
 
-    return photos.map(photo => {
+    return newPhotos.map(photo => {
       const filePath = path.join(tmpDir, photo.originalName);
 
       if (!fs.existsSync(filePath)) {
@@ -219,20 +226,22 @@ export class ProjectsService {
       section: string | null;
       defectTypeName?: string;
       order: number;
+      yandexPath?: string | null; // добавлено
     }[],
   ): Promise<{ message: string; folderUrl: string; renamedPhotos: { originalName: string; filename: string }[] }> {
 
     await this.createFolder(projectName);
 
-    // создаём папки для секций и для дефектов
     const folders = new Set<string>();
-    photos.forEach(p => {
-      folders.add(p.section ?? 'Дефекты');
-    });
+    photos.forEach(p => folders.add(p.section ?? 'дефекты'));
     await Promise.all([...folders].map(f => this.createFolder(`${projectName}/${f}`)));
 
+    // разделяем на уже загруженные и новые
+    const newPhotos = photos.filter(p => !p.yandexPath);
+    const alreadyUploaded = photos.filter(p => p.yandexPath);
+
     const photoMap = new Map<string, { section: string | null; order: number; defectTypeName?: string }>();
-    for (const photo of photos) {
+    for (const photo of newPhotos) {
       photoMap.set(photo.originalName, {
         section: photo.section,
         order: photo.order,
@@ -242,6 +251,13 @@ export class ProjectsService {
 
     const renamedPhotos: { originalName: string; filename: string }[] = [];
 
+    // для уже загруженных — просто берём имя файла из yandexPath
+    for (const p of alreadyUploaded) {
+      const existingFilename = p.yandexPath!.split('/').pop() ?? p.originalName;
+      renamedPhotos.push({ originalName: p.originalName, filename: existingFilename });
+    }
+
+    // загружаем только новые файлы батчами
     for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
       const batch = files.slice(i, i + this.BATCH_SIZE);
 

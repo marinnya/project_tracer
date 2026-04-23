@@ -142,13 +142,30 @@ export class ProjectsController {
         order: number;
       }[];
 
+      // загружаем актуальные фото из БД — нужно знать у каких уже есть yandexPath
+      const savedPhotos = await this.projectService.getProjectPhotos(projectId);
+      const savedDefects = await this.projectService.getDefects(projectId);
+
+      // строим map: originalName → yandexPath
+      const yandexPathMap = new Map<string, string | null>();
+      savedPhotos.forEach(p => yandexPathMap.set(p.originalName, p.yandexPath ?? null));
+      savedDefects.forEach(d => d.photos.forEach(p => yandexPathMap.set(p.originalName, p.yandexPath ?? null)));
+
+      // добавляем yandexPath к каждому фото
+      const photosWithYandex = photos.map(p => ({
+        ...p,
+        yandexPath: yandexPathMap.get(p.originalName) ?? null,
+      }));
+
       const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
-      const files = await this.projectService.readTempFiles(tmpDir, photos);
+
+      // читаем только новые файлы
+      const files = await this.projectService.readTempFiles(tmpDir, photosWithYandex);
 
       const { folderUrl, renamedPhotos } = await this.projectService.uploadToYandex(
         files,
         body.projectName,
-        photos,
+        photosWithYandex,
       );
 
       const renamedMap = new Map(renamedPhotos.map(r => [r.originalName, r.filename]));
@@ -167,7 +184,10 @@ export class ProjectsController {
       await this.projectService.archiveProject(projectId);
       await this.projectService.sendProjectToOneC(projectId);
 
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      // удаляем временную папку только если она существует
+      if (fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
 
       return { message: 'Файлы загружены', folderUrl };
     } catch (e: unknown) {
