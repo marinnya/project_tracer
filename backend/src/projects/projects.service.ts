@@ -226,7 +226,7 @@ export class ProjectsService {
     // создаём папки для секций и для дефектов
     const folders = new Set<string>();
     photos.forEach(p => {
-      folders.add(p.section ?? 'дефекты');
+      folders.add(p.section ?? 'Дефекты');
     });
     await Promise.all([...folders].map(f => this.createFolder(`${projectName}/${f}`)));
 
