@@ -226,20 +226,26 @@ export class ProjectsService {
       section: string | null;
       defectTypeName?: string;
       order: number;
-      yandexPath?: string | null; // добавлено
+      yandexPath?: string | null;
     }[],
   ): Promise<{ message: string; folderUrl: string; renamedPhotos: { originalName: string; filename: string }[] }> {
 
+    // создаём корневую папку проекта
     await this.createFolder(projectName);
 
+    // создаём подпапки последовательно — гарантирует что каждая готова перед следующей
     const folders = new Set<string>();
     photos.forEach(p => folders.add(p.section ?? 'дефекты'));
-    await Promise.all([...folders].map(f => this.createFolder(`${projectName}/${f}`)));
 
-    // разделяем на уже загруженные и новые
+    for (const folder of folders) {
+      await this.createFolder(`${projectName}/${folder}`);
+    }
+
+    // разделяем на уже загруженные (есть yandexPath) и новые
     const newPhotos = photos.filter(p => !p.yandexPath);
     const alreadyUploaded = photos.filter(p => p.yandexPath);
 
+    // map для быстрого поиска метаданных новых файлов по имени
     const photoMap = new Map<string, { section: string | null; order: number; defectTypeName?: string }>();
     for (const photo of newPhotos) {
       photoMap.set(photo.originalName, {
@@ -251,13 +257,13 @@ export class ProjectsService {
 
     const renamedPhotos: { originalName: string; filename: string }[] = [];
 
-    // для уже загруженных — просто берём имя файла из yandexPath
+    // уже загруженные — берём имя файла из существующего yandexPath
     for (const p of alreadyUploaded) {
       const existingFilename = p.yandexPath!.split('/').pop() ?? p.originalName;
       renamedPhotos.push({ originalName: p.originalName, filename: existingFilename });
     }
 
-    // загружаем только новые файлы батчами
+    // загружаем только новые файлы батчами по BATCH_SIZE
     for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
       const batch = files.slice(i, i + this.BATCH_SIZE);
 
@@ -273,7 +279,10 @@ export class ProjectsService {
           renamedPhotos.push({ originalName, filename: renamedFilename });
 
           const folderPath = `${projectName}/${section}`;
-          const renamedFile = { ...file, originalname: Buffer.from(renamedFilename).toString('latin1') };
+          const renamedFile = {
+            ...file,
+            originalname: Buffer.from(renamedFilename).toString('latin1'),
+          };
 
           return this.uploadFile(renamedFile, folderPath).catch((e: unknown) => {
             const message = e instanceof Error ? e.message : String(e);
