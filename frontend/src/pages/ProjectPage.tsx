@@ -236,14 +236,15 @@ function ProjectPage({ onLogout }: Props) {
       formData.append("sections", JSON.stringify(sectionsState));
 
       for (const title of SECTIONS) {
-        // передаём переименованное имя явно
         sections[title].files.forEach(file =>
-          formData.append("files", file, file.name) // третий параметр — имя файла
+          formData.append("files", file, `${title}||${file.name}`)
         );
       }
 
       for (const d of defects) {
-        d.files.forEach(file => formData.append("files", file, file.name));
+        d.files.forEach(file =>
+          formData.append("files", file, `__defect__${d.typeName}||${file.name}`)
+        );
       }
 
       formData.append("sectionPhotos", JSON.stringify(buildSectionPhotosMeta()));

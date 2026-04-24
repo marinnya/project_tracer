@@ -186,12 +186,10 @@ export class ProjectsService {
   // читаем только НОВЫЕ файлы — те у которых ещё нет yandexPath
   async readTempFiles(
     tmpDir: string,
-    photos: { originalName: string; yandexPath?: string | null }[],
+    photos: { originalName: string; section: string | null; defectTypeName?: string; yandexPath?: string | null }[],
   ): Promise<Express.Multer.File[]> {
 
-    // фильтруем только новые файлы
     const newPhotos = photos.filter(p => !p.yandexPath);
-
     if (!newPhotos.length) return [];
 
     if (!fs.existsSync(tmpDir)) {
@@ -201,11 +199,16 @@ export class ProjectsService {
     }
 
     return newPhotos.map(photo => {
-      const filePath = path.join(tmpDir, photo.originalName);
+      // определяем подпапку по секции или типу дефекта
+      const subfolder = photo.defectTypeName
+        ? `__defect__${photo.defectTypeName}`
+        : (photo.section ?? 'misc');
+
+      const filePath = path.join(tmpDir, subfolder, photo.originalName);
 
       if (!fs.existsSync(filePath)) {
         throw new InternalServerErrorException(
-          `Файл не найден во временной папке: ${photo.originalName}`
+          `Файл не найден во временной папке: ${photo.originalName} (подпапка: ${subfolder})`
         );
       }
 

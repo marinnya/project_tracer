@@ -44,17 +44,28 @@ export class ProjectsController {
   @Patch(':id/save')
   @UseInterceptors(FilesInterceptor('files', 200, {
     storage: diskStorage({
-      destination: (req, file, cb) => {
-        const projectId = String(req.params.id);
-        const uploadPath = path.join(process.cwd(), 'uploads', 'tmp', projectId);
-        fs.mkdirSync(uploadPath, { recursive: true });
-        cb(null, uploadPath);
-      },
-      filename: (req, file, cb) => {
-        const filename = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        cb(null, filename);
-      },
-    }),
+    destination: (req, file, cb) => {
+      const projectId = String(req.params.id);
+      const originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
+
+      // имя файла передаётся как "секция||имя.jpg"
+      const parts = originalname.split('||');
+      const subfolder = parts.length > 1 ? parts[0] : 'misc';
+
+      const uploadPath = path.join(
+        process.cwd(), 'uploads', 'tmp', projectId, subfolder
+      );
+      fs.mkdirSync(uploadPath, { recursive: true });
+      cb(null, uploadPath);
+    },
+    filename: (req, file, cb) => {
+      const originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      const parts = originalname.split('||');
+      // убираем префикс секции — сохраняем только имя файла
+      const filename = parts.length > 1 ? parts[1] : originalname;
+      cb(null, filename);
+    },
+  }),
   }))
   async saveDraft(
     @Param('id', ParseIntPipe) projectId: number,
