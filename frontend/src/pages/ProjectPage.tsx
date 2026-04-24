@@ -235,18 +235,25 @@ function ProjectPage({ onLogout }: Props) {
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
+      // маппинг: имя файла → секция (нужен бэкенду чтобы знать в какую подпапку сохранить)
+      const fileToSection: Record<string, string> = {};
+
       for (const title of SECTIONS) {
-        sections[title].files.forEach(file =>
-          formData.append("files", file, `${title}||${file.name}`)
-        );
+        sections[title].files.forEach(file => {
+          formData.append("files", file);
+          fileToSection[file.name] = title;
+        });
       }
 
       for (const d of defects) {
-        d.files.forEach(file =>
-          formData.append("files", file, `__defect__${d.typeName}||${file.name}`)
-        );
+        d.files.forEach(file => {
+          formData.append("files", file);
+          fileToSection[file.name] = `__defect__${d.typeName}`;
+        });
       }
 
+      // передаём маппинг на бэкенд
+      formData.append("fileToSection", JSON.stringify(fileToSection));
       formData.append("sectionPhotos", JSON.stringify(buildSectionPhotosMeta()));
 
       const defectsData = defects.map(d => ({
@@ -291,6 +298,7 @@ function ProjectPage({ onLogout }: Props) {
       setIsSaving(false);
     }
   };
+
 
   const handleFinalSubmit = async () => {
     setError(null);

@@ -12,7 +12,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import * as multer from 'multer';
 import { Express } from 'express';
 import { ProjectsService } from './projects.service';
 import { Logger } from '@nestjs/common';
@@ -40,32 +40,10 @@ export class ProjectsController {
     return this.projectService.getDefects(projectId);
   }
 
-  // сохранить черновик — файлы секций и дефектов во временную папку
+  // сохранить черновик — файлы хранятся в памяти и сохраняются вручную в подпапки по секциям
   @Patch(':id/save')
   @UseInterceptors(FilesInterceptor('files', 200, {
-    storage: diskStorage({
-    destination: (req, file, cb) => {
-      const projectId = String(req.params.id);
-      const originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
-
-      // имя файла передаётся как "секция||имя.jpg"
-      const parts = originalname.split('||');
-      const subfolder = parts.length > 1 ? parts[0] : 'misc';
-
-      const uploadPath = path.join(
-        process.cwd(), 'uploads', 'tmp', projectId, subfolder
-      );
-      fs.mkdirSync(uploadPath, { recursive: true });
-      cb(null, uploadPath);
-    },
-    filename: (req, file, cb) => {
-      const originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
-      const parts = originalname.split('||');
-      // убираем префикс секции — сохраняем только имя файла
-      const filename = parts.length > 1 ? parts[1] : originalname;
-      cb(null, filename);
-    },
-  }),
+    storage: multer.memoryStorage(), // храним в памяти — сохраняем вручную после получения body
   }))
   async saveDraft(
     @Param('id', ParseIntPipe) projectId: number,
@@ -75,9 +53,28 @@ export class ProjectsController {
       sectionPhotos: string;
       defects: string;
       deletedPhotos?: string;
+      fileToSection?: string; // маппинг: имя файла → подпапка
     },
   ) {
     this.logger.log(`Сохранение черновика. projectId: ${projectId}`);
+
+    // маппинг имя файла → подпапка (секция или __defect__<typeName>)
+    const fileToSection: Record<string, string> = body.fileToSection
+      ? JSON.parse(body.fileToSection)
+      : {};
+
+    // сохраняем файлы в подпапки по секциям
+    if (files?.length) {
+      for (const file of files) {
+        const subfolder = fileToSection[file.originalname] ?? 'misc';
+        const uploadPath = path.join(
+          process.cwd(), 'uploads', 'tmp', String(projectId), subfolder
+        );
+        fs.mkdirSync(uploadPath, { recursive: true });
+        const filePath = path.join(uploadPath, file.originalname);
+        fs.writeFileSync(filePath, file.buffer!);
+      }
+    }
 
     // сохраняем количество страниц секций
     const sections = JSON.parse(body.sections) as Record<string, { pages: number }>;
@@ -110,14 +107,12 @@ export class ProjectsController {
 
     await this.projectService.saveDefects(projectId, defects);
 
-
     // получаем актуальные дефекты из БД чтобы знать их id
     const savedDefects = await this.projectService.getDefects(projectId);
 
     // сохраняем новые фото дефектов
     for (const d of defects) {
       if (!d.newPhotos?.length) continue;
-      // находим соответствующий дефект в БД по typeId и typeName
       const savedDefect = savedDefects.find(
         sd => sd.typeId === d.typeId && sd.typeName === d.typeName
       );
@@ -151,7 +146,7 @@ export class ProjectsController {
         section: string | null;
         defectTypeName?: string;
         order: number;
-        yandexPath?: string | null; // добавить
+        yandexPath?: string | null;
       }[];
 
       // загружаем актуальные фото из БД — нужно знать у каких уже есть yandexPath
