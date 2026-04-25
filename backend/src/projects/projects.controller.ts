@@ -21,6 +21,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import * as path from 'path';
 import * as fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 
 @Controller('projects')
 export class ProjectsController {
@@ -53,33 +54,51 @@ export class ProjectsController {
       sectionPhotos: string;
       defects: string;
       deletedPhotos?: string;
-      fileToSection?: string; // маппинг: имя файла → подпапка
+      fileToSection?: string; // маппинг: clientKey (originalName|||index) → подпапка
     },
   ) {
     this.logger.log(`Сохранение черновика. projectId: ${projectId}`);
-
     this.logger.log(`fileToSection: ${body.fileToSection}`);
     this.logger.log(`Файлов получено: ${files?.length ?? 0}`);
 
-    // маппинг имя файла → подпапка (секция или __defect__<typeName>)
+    // маппинг clientKey → подпапка (секция или __defect__<typeName>)
+    // clientKey = "originalName|||index" — уникален даже для файлов с одинаковыми именами
     const fileToSection: Record<string, string> = body.fileToSection
       ? JSON.parse(body.fileToSection)
       : {};
 
     this.logger.log(`Маппинг: ${JSON.stringify(fileToSection)}`);
 
-    // сохраняем файлы в подпапки по секциям
+    // сохраняем файлы в подпапки по секциям под UUID-именами
+    // возвращаем маппинг clientKey → storedName (uuid) для передачи в saveTempPhotos
+    const clientKeyToStoredName: Record<string, string> = {};
+
     if (files?.length) {
       for (const file of files) {
-        // декодируем имя файла из latin1 в utf8
-        const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        const subfolder = fileToSection[decodedName] ?? 'misc';
+        // декодируем оригинальное имя файла из latin1 в utf8
+        const decodedOriginalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+
+        // clientKey передаётся в поле fieldname мультипарта: "originalName|||index"
+        // если fieldname не передан — используем decodedOriginalName как fallback
+        const clientKey = Buffer.from(file.fieldname ?? '', 'latin1').toString('utf8') || decodedOriginalName;
+
+        const subfolder = fileToSection[clientKey] ?? 'misc';
+
+        // генерируем уникальное имя файла — UUID + оригинальное расширение
+        const ext = path.extname(decodedOriginalName);
+        const storedName = `${uuidv4()}${ext}`;
+
         const uploadPath = path.join(
           process.cwd(), 'uploads', 'tmp', String(projectId), subfolder
         );
         fs.mkdirSync(uploadPath, { recursive: true });
-        const filePath = path.join(uploadPath, decodedName);
+
+        const filePath = path.join(uploadPath, storedName);
         fs.writeFileSync(filePath, file.buffer!);
+
+        clientKeyToStoredName[clientKey] = storedName;
+
+        this.logger.log(`Сохранён файл: ${decodedOriginalName} → ${storedName} (папка: ${subfolder})`);
       }
     }
 
@@ -99,7 +118,7 @@ export class ProjectsController {
       typeId: number | string;
       typeName: string;
       pages: number | string;
-      newPhotos: { originalName: string; order: number }[];
+      newPhotos: { originalName: string; clientKey: string; order: number }[];
     }[];
 
     const defects = rawDefects
@@ -125,7 +144,14 @@ export class ProjectsController {
       );
       if (!savedDefect) continue;
 
-      await this.projectService.saveTempDefectPhotos(savedDefect.id, projectId, d.newPhotos);
+      // подставляем storedName для каждого фото дефекта
+      const photosWithStoredName = d.newPhotos.map(p => ({
+        originalName: p.originalName,
+        storedName: clientKeyToStoredName[p.clientKey] ?? null,
+        order: p.order,
+      }));
+
+      await this.projectService.saveTempDefectPhotos(savedDefect.id, projectId, photosWithStoredName);
     }
 
     // сохраняем новые фото обычных секций
@@ -133,9 +159,19 @@ export class ProjectsController {
       const sectionPhotos = JSON.parse(body.sectionPhotos) as {
         section: string;
         originalName: string;
+        clientKey: string;
         order: number;
       }[];
-      await this.projectService.saveTempPhotos(projectId, sectionPhotos);
+
+      // подставляем storedName для каждого фото секции
+      const sectionPhotosWithStoredName = sectionPhotos.map(p => ({
+        section: p.section,
+        originalName: p.originalName,
+        storedName: clientKeyToStoredName[p.clientKey] ?? null,
+        order: p.order,
+      }));
+
+      await this.projectService.saveTempPhotos(projectId, sectionPhotosWithStoredName);
     }
 
     return { message: 'Черновик сохранён' };
@@ -156,20 +192,30 @@ export class ProjectsController {
         yandexPath?: string | null;
       }[];
 
-      // загружаем актуальные фото из БД — нужно знать у каких уже есть yandexPath
+      // загружаем актуальные фото из БД — нужно знать у каких уже есть yandexPath и storedName
       const savedPhotos = await this.projectService.getProjectPhotos(projectId);
       const savedDefects = await this.projectService.getDefects(projectId);
 
-      // строим map: originalName → yandexPath
-      const yandexPathMap = new Map<string, string | null>();
-      savedPhotos.forEach(p => yandexPathMap.set(p.originalName, p.yandexPath ?? null));
-      savedDefects.forEach(d => d.photos.forEach(p => yandexPathMap.set(p.originalName, p.yandexPath ?? null)));
+      // строим map: id → { yandexPath, filename (storedName) }
+      // используем id фото чтобы точно различать одинаковые originalName в разных секциях
+      const photoMetaById = new Map<number, { yandexPath: string | null; storedName: string | null }>();
+      savedPhotos.forEach(p => photoMetaById.set(p.id, { yandexPath: p.yandexPath ?? null, storedName: p.filename ?? null }));
+      savedDefects.forEach(d => d.photos.forEach(p => photoMetaById.set(p.id, { yandexPath: p.yandexPath ?? null, storedName: p.filename ?? null })));
 
-      // добавляем yandexPath к каждому фото
-      const photosWithYandex = photos.map(p => ({
-        ...p,
-        yandexPath: yandexPathMap.get(p.originalName) ?? null,
-      }));
+      // добавляем yandexPath и storedName к каждому фото (ищем по originalName + section для совместимости)
+      const savedPhotosList = [...savedPhotos, ...savedDefects.flatMap(d => d.photos)];
+      const photosWithMeta = photos.map(p => {
+        // ищем совпадение по originalName + section
+        const match = savedPhotosList.find(sp =>
+          sp.originalName === p.originalName &&
+          (sp.section === p.section || (p.section === 'дефекты' && sp.defectId != null))
+        );
+        return {
+          ...p,
+          yandexPath: match?.yandexPath ?? null,
+          storedName: match?.filename ?? null,
+        };
+      });
 
       const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
 
@@ -177,13 +223,13 @@ export class ProjectsController {
       this.logger.log(`Фото: ${JSON.stringify(photos.map(p => ({ name: p.originalName, section: p.section, hasYandex: !!p.yandexPath })))}`);
 
       // читаем только новые файлы
-      const files = await this.projectService.readTempFiles(tmpDir, photosWithYandex);
+      const files = await this.projectService.readTempFiles(tmpDir, photosWithMeta);
       this.logger.log(`Файлов для загрузки: ${files.length}`);
 
       const { folderUrl, renamedPhotos } = await this.projectService.uploadToYandex(
         files,
         body.projectName,
-        photosWithYandex,
+        photosWithMeta,
       );
 
       const renamedMap = new Map(renamedPhotos.map(r => [r.originalName, r.filename]));

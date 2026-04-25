@@ -178,18 +178,28 @@ function ProjectPage({ onLogout }: Props) {
     })));
   };
 
+  // строим уникальный clientKey для файла: "originalName|||глобальный_индекс"
+  // это позволяет различать файлы с одинаковыми именами в разных секциях и внутри одной секции
+  const buildClientKey = (fileName: string, globalIndex: number): string => {
+    return `${fileName}|||${globalIndex}`;
+  };
+
   const buildSectionPhotosMeta = () => {
-    const meta: { section: string; originalName: string; order: number }[] = [];
+    const meta: { section: string; originalName: string; clientKey: string; order: number }[] = [];
+    let globalIndex = 0;
 
     for (const title of SECTIONS) {
       const saved = savedPhotos
         .filter(p => p.section === title)
         .sort((a, b) => a.order - b.order);
 
-      saved.forEach(p => meta.push({ section: title, originalName: p.originalName, order: p.order }));
+      // уже сохранённые фото — clientKey не нужен (storedName берётся из БД)
+      saved.forEach(p => meta.push({ section: title, originalName: p.originalName, clientKey: '', order: p.order }));
 
+      // новые файлы — clientKey уникален для каждого файла
       sections[title].files.forEach((file, i) => {
-        meta.push({ section: title, originalName: file.name, order: saved.length + i + 1 });
+        const clientKey = buildClientKey(file.name, globalIndex++);
+        meta.push({ section: title, originalName: file.name, clientKey, order: saved.length + i + 1 });
       });
     }
 
@@ -235,20 +245,25 @@ function ProjectPage({ onLogout }: Props) {
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
-      // маппинг: имя файла → секция (нужен бэкенду чтобы знать в какую подпапку сохранить)
+      // маппинг: clientKey → секция
+      // clientKey = "originalName|||globalIndex" — уникален даже для файлов с одинаковыми именами
       const fileToSection: Record<string, string> = {};
+      let globalIndex = 0;
 
       for (const title of SECTIONS) {
         sections[title].files.forEach(file => {
-          formData.append("files", file);
-          fileToSection[file.name] = title;
+          const clientKey = buildClientKey(file.name, globalIndex++);
+          // передаём clientKey как fieldname файла — бэкенд читает его из file.fieldname
+          formData.append(clientKey, file);
+          fileToSection[clientKey] = title;
         });
       }
 
       for (const d of defects) {
         d.files.forEach(file => {
-          formData.append("files", file);
-          fileToSection[file.name] = `__defect__${d.typeName}`;
+          const clientKey = buildClientKey(file.name, globalIndex++);
+          formData.append(clientKey, file);
+          fileToSection[clientKey] = `__defect__${d.typeName}`;
         });
       }
 
@@ -256,17 +271,21 @@ function ProjectPage({ onLogout }: Props) {
       formData.append("fileToSection", JSON.stringify(fileToSection));
       formData.append("sectionPhotos", JSON.stringify(buildSectionPhotosMeta()));
 
-      const defectsData = defects.map(d => ({
-        id: d.id > 0 ? d.id : undefined,
-        typeId: d.typeId,
-        typeName: d.typeName,
-        pages: d.pages,
-        newPhotos: d.files.map((file, i) => {
-          const savedDef = savedDefects.find(sd => sd.id === d.id);
-          const savedCount = savedDef?.photos.length ?? 0;
-          return { originalName: file.name, order: savedCount + i + 1 };
-        }),
-      }));
+      const defectsData = defects.map(d => {
+        let defectGlobalIndex = globalIndex; // продолжаем нумерацию
+        return {
+          id: d.id > 0 ? d.id : undefined,
+          typeId: d.typeId,
+          typeName: d.typeName,
+          pages: d.pages,
+          newPhotos: d.files.map((file, i) => {
+            const savedDef = savedDefects.find(sd => sd.id === d.id);
+            const savedCount = savedDef?.photos.length ?? 0;
+            const clientKey = buildClientKey(file.name, defectGlobalIndex++);
+            return { originalName: file.name, clientKey, order: savedCount + i + 1 };
+          }),
+        };
+      });
       formData.append("defects", JSON.stringify(defectsData));
       formData.append("deletedPhotos", JSON.stringify(deletedPhotoIds));
 

@@ -70,6 +70,8 @@ export class ProjectsService {
     }
   }
 
+  
+
   // получить фото обычных секций проекта
   async getProjectPhotos(projectId: number) {
     return this.prisma.projectPhoto.findMany({
@@ -129,18 +131,20 @@ export class ProjectsService {
   }
 
   // сохраняет метаданные новых фото секций (без дефектов)
+  // storedName — UUID-имя файла на диске (null для уже сохранённых фото из БД)
   async saveTempPhotos(
     projectId: number,
-    photos: { section: string; originalName: string; order: number }[],
+    photos: { section: string; originalName: string; storedName: string | null; order: number }[],
   ) {
     const existing = await this.prisma.projectPhoto.findMany({
       where: { projectId, defectId: null },
-      select: { originalName: true, section: true },
+      select: { filename: true },
     });
 
-    // фильтруем по комбинации originalName + section
-    const existingKeys = new Set(existing.map(p => `${p.section}||${p.originalName}`));
-    const newPhotos = photos.filter(p => !existingKeys.has(`${p.section}||${p.originalName}`));
+    // фильтруем по storedName — UUID всегда уникален, поэтому дублей быть не может
+    // фото без storedName (уже сохранённые из БД) пропускаем
+    const existingStoredNames = new Set(existing.map(p => p.filename).filter(Boolean));
+    const newPhotos = photos.filter(p => p.storedName && !existingStoredNames.has(p.storedName));
 
     if (!newPhotos.length) return;
 
@@ -150,25 +154,27 @@ export class ProjectsService {
         section: p.section,
         originalName: p.originalName,
         order: p.order,
-        filename: null,
+        filename: p.storedName,  // UUID-имя файла на диске
         yandexPath: null,
       })),
     });
   }
 
   // сохраняет метаданные новых фото дефекта
+  // storedName — UUID-имя файла на диске (null для уже сохранённых фото из БД)
   async saveTempDefectPhotos(
     defectId: number,
     projectId: number,
-    photos: { originalName: string; order: number }[],
+    photos: { originalName: string; storedName: string | null; order: number }[],
   ) {
     const existing = await this.prisma.projectPhoto.findMany({
       where: { defectId },
-      select: { originalName: true },
+      select: { filename: true },
     });
 
-    const existingNames = new Set(existing.map(p => p.originalName));
-    const newPhotos = photos.filter(p => !existingNames.has(p.originalName));
+    // фильтруем по storedName — UUID всегда уникален
+    const existingStoredNames = new Set(existing.map(p => p.filename).filter(Boolean));
+    const newPhotos = photos.filter(p => p.storedName && !existingStoredNames.has(p.storedName));
 
     if (!newPhotos.length) return;
 
@@ -178,16 +184,23 @@ export class ProjectsService {
         defectId,
         originalName: p.originalName,
         order: p.order,
-        filename: null,
+        filename: p.storedName,  // UUID-имя файла на диске
         yandexPath: null,
       })),
     });
   }
 
   // читаем только НОВЫЕ файлы — те у которых ещё нет yandexPath
+  // файл ищем по storedName (UUID) в подпапке секции
   async readTempFiles(
     tmpDir: string,
-    photos: { originalName: string; section: string | null; defectTypeName?: string; yandexPath?: string | null }[],
+    photos: {
+      originalName: string;
+      section: string | null;
+      defectTypeName?: string;
+      yandexPath?: string | null;
+      storedName?: string | null;
+    }[],
   ): Promise<Express.Multer.File[]> {
 
     const newPhotos = photos.filter(p => !p.yandexPath);
@@ -204,16 +217,19 @@ export class ProjectsService {
         ? `__defect__${photo.defectTypeName}`
         : (photo.section ?? 'misc');
 
-      const filePath = path.join(tmpDir, subfolder, photo.originalName);
+      // ищем файл по storedName (UUID) если он есть, иначе по originalName (обратная совместимость)
+      const fileName = photo.storedName ?? photo.originalName;
+      const filePath = path.join(tmpDir, subfolder, fileName);
 
       if (!fs.existsSync(filePath)) {
         throw new InternalServerErrorException(
-          `Файл не найден во временной папке: ${photo.originalName} (подпапка: ${subfolder})`
+          `Файл не найден во временной папке: ${photo.originalName} (storedName: ${fileName}, подпапка: ${subfolder})`
         );
       }
 
       return {
-        originalname: Buffer.from(photo.originalName).toString('latin1'),
+        // передаём originalName в latin1 — uploadToYandex декодирует обратно
+        originalname: Buffer.from(photo.originalName, 'utf8').toString('latin1'),
         path: filePath,
         mimetype: 'application/octet-stream',
         buffer: undefined,
@@ -248,7 +264,8 @@ export class ProjectsService {
     const newPhotos = photos.filter(p => !p.yandexPath);
     const alreadyUploaded = photos.filter(p => p.yandexPath);
 
-    // map для быстрого поиска метаданных новых файлов по имени
+    // map для быстрого поиска метаданных новых файлов по originalName
+    // порядок в массиве соответствует порядку в files — используем index для точного сопоставления
     const photoMap = new Map<string, { section: string | null; order: number; defectTypeName?: string }>();
     for (const photo of newPhotos) {
       photoMap.set(photo.originalName, {
@@ -278,6 +295,7 @@ export class ProjectsService {
           const order = meta?.order ?? i + 1;
           const defectTypeName = meta?.defectTypeName;
 
+          // имя на Яндекс Диске — по-прежнему читаемое: титульный1.jpg, техданные2.jpg и т.д.
           const renamedFilename = this.getRenamedFilename(originalName, section, defectTypeName, order);
           renamedPhotos.push({ originalName, filename: renamedFilename });
 
