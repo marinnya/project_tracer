@@ -127,169 +127,171 @@ export default function Dashboard({ onLogout }: Props) {
       {/* пробрасываем onLogout в Header */}
       <Header onLogout={onLogout} />
 
-      <main className="content">
-        <div className="content-header">
-          <h1>{showArchive ? "Архив проектов" : "Проекты в работе"}</h1>
+      <div className="dashboard-bg">
+        <main className="dashboard-container content">
+          <div className="content-header">
+            <h1>{showArchive ? "Архив проектов" : "Проекты в работе"}</h1>
 
-          {/* Десктопные фильтры */}
-          <div className="filters desktop-only">
-            <button
-              className={!showArchive ? "active" : ""}
-              onClick={() => setShowArchive(false)}
-            >
-              Активные
-            </button>
-            <button
-              className={showArchive ? "active" : ""}
-              onClick={() => setShowArchive(true)}
-            >
-              Архив
-            </button>
+            {/* Десктопные фильтры */}
+            <div className="filters desktop-only">
+              <button
+                className={!showArchive ? "active" : ""}
+                onClick={() => setShowArchive(false)}
+              >
+                Активные
+              </button>
+              <button
+                className={showArchive ? "active" : ""}
+                onClick={() => setShowArchive(true)}
+              >
+                Архив
+              </button>
+            </div>
+
+            {/* Мобильные фильтры, ссылка на элемент для закрытия при внешнем клике */}
+            <div className="mobile-only" ref={filterRef}>
+              <button
+                className="filter-icon-btn"
+                onClick={() => setFilterOpen((prev) => !prev)}
+              >
+                <img src="/filter.png" alt="Фильтр" />
+              </button>
+
+              {filterOpen && (
+                <div className="filter-dropdown">
+                  <button
+                    className={!showArchive ? "active" : ""}
+                    onClick={() => { setShowArchive(false); setFilterOpen(false); }}
+                  >
+                    Активные
+                  </button>
+                  <button
+                    className={showArchive ? "active" : ""}
+                    onClick={() => { setShowArchive(true); setFilterOpen(false); }}
+                  >
+                    Архив
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Мобильные фильтры, ссылка на элемент для закрытия при внешнем клике */}
-          <div className="mobile-only" ref={filterRef}>
-            <button
-              className="filter-icon-btn"
-              onClick={() => setFilterOpen((prev) => !prev)}
-            >
-              <img src="/filter.png" alt="Фильтр" />
-            </button>
+          <div className="projects-desktop">
+            <table className="projects-table">
+              <thead>
+                <tr>
+                  {/* заголовки с кликабельной сортировкой */}
+                  <th>
+                    <button
+                      type="button"
+                      className="th-sort-btn"
+                      onClick={() => handleSort("name")}
+                    >
+                      Наименование <SortArrow field="name" />
+                    </button>
+                  </th>
 
-            {filterOpen && (
-              <div className="filter-dropdown">
-                <button
-                  className={!showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(false); setFilterOpen(false); }}
-                >
-                  Активные
-                </button>
-                <button
-                  className={showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(true); setFilterOpen(false); }}
-                >
-                  Архив
-                </button>
-              </div>
-            )}
+                  <th>
+                    <button
+                      type="button"
+                      className="th-sort-btn"
+                      onClick={() => handleSort("startDate")}
+                    >
+                      Дата начала <SortArrow field="startDate" />
+                    </button>
+                  </th>
+
+                  <th>
+                    <button
+                      type="button"
+                      className="th-sort-btn"
+                      onClick={() => handleSort("endDate")}
+                    >
+                      Дата окончания <SortArrow field="endDate" />
+                    </button>
+                  </th>
+                  <th>Ответственный</th>
+                  <th>Статус</th>
+                  {showArchive && role === "ADMIN" && <th>Действия</th>}
+                </tr>
+              </thead>
+
+              <tbody>
+                {sorted.map((project) => (
+                  <tr
+                    key={project.id}
+                    className={showArchive ? "" : "clickable"}
+                    onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
+                  >
+                    <td className="name">{project.name}</td>
+                    <td>{formatDate(project.startDate)}</td>
+                    <td>{formatDate(project.endDate)}</td>
+                    <td>{project.responsible}</td>
+                    <td>
+                      <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
+                        {project.status}
+                      </span>
+                    </td>
+                    {showArchive && role === "ADMIN" && (
+                      <td>
+                        <span
+                          className="status edit"
+                          onClick={(e) => handleUnarchive(e, project.id)}
+                        >
+                          Вернуть
+                        </span>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
 
-        <div className="projects-desktop">
-          <table className="projects-table">
-            <thead>
-              <tr>
-                {/* заголовки с кликабельной сортировкой */}
-                <th>
-                  <button
-                    type="button"
-                    className="th-sort-btn"
-                    onClick={() => handleSort("name")}
-                  >
-                    Наименование <SortArrow field="name" />
-                  </button>
-                </th>
+          {/* Мобильная версия */}
+          <div className="projects-mobile">
+            {sorted.map((project) => (
+              <div
+                key={project.id}
+                className={showArchive ? "project-card" : "project-card clickable"}
+                onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
+              >
+                <div className="project-card-header">
+                  <div className="project-title">{project.name}</div>
+                </div>
 
-                <th>
-                  <button
-                    type="button"
-                    className="th-sort-btn"
-                    onClick={() => handleSort("startDate")}
-                  >
-                    Дата начала <SortArrow field="startDate" />
-                  </button>
-                </th>
+                <div className="project-info">
+                  <div className="project-dates">
+                    {formatDate(project.startDate)} – {formatDate(project.endDate)}
+                  </div>
 
-                <th>
-                  <button
-                    type="button"
-                    className="th-sort-btn"
-                    onClick={() => handleSort("endDate")}
-                  >
-                    Дата окончания <SortArrow field="endDate" />
-                  </button>
-                </th>
-                <th>Ответственный</th>
-                <th>Статус</th>
-                {showArchive && role === "ADMIN" && <th>Действия</th>}
-              </tr>
-            </thead>
-
-            <tbody>
-              {sorted.map((project) => (
-                <tr
-                  key={project.id}
-                  className={showArchive ? "" : "clickable"}
-                  onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
-                >
-                  <td className="name">{project.name}</td>
-                  <td>{formatDate(project.startDate)}</td>
-                  <td>{formatDate(project.endDate)}</td>
-                  <td>{project.responsible}</td>
-                  <td>
+                  <div className="status-actions">
                     <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
                       {project.status}
                     </span>
-                  </td>
-                  {showArchive && role === "ADMIN" && (
-                    <td>
+
+                    {showArchive && role === "ADMIN" && (
                       <span
                         className="status edit"
                         onClick={(e) => handleUnarchive(e, project.id)}
                       >
                         Вернуть
                       </span>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Мобильная версия */}
-        <div className="projects-mobile">
-          {sorted.map((project) => (
-            <div
-              key={project.id}
-              className={showArchive ? "project-card" : "project-card clickable"}
-              onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
-            >
-              <div className="project-card-header">
-                <div className="project-title">{project.name}</div>
-              </div>
-
-              <div className="project-info">
-                <div className="project-dates">
-                  {formatDate(project.startDate)} – {formatDate(project.endDate)}
+                    )}
+                  </div>
                 </div>
 
-                <div className="status-actions">
-                  <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
-                    {project.status}
-                  </span>
-
-                  {showArchive && role === "ADMIN" && (
-                    <span
-                      className="status edit"
-                      onClick={(e) => handleUnarchive(e, project.id)}
-                    >
-                      Вернуть
-                    </span>
-                  )}
+                <div className="project-responsible">
+                  <img src="/responsible.png" alt="Ответственный" />
+                  <span>{project.responsible}</span>
                 </div>
-              </div>
 
-              <div className="project-responsible">
-                <img src="/responsible.png" alt="Ответственный" />
-                <span>{project.responsible}</span>
+                
               </div>
-
-              
-            </div>
-          ))}
-        </div>
-      </main>
+            ))}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

@@ -169,144 +169,145 @@ export default function EmployeesPage({ onLogout }: Props) {
       {/* пробрасываем onLogout в Header */}
       <Header onLogout={onLogout} />
 
-      <main className="content">
-        <div className="content-header">
-          <div className="header-title">
-            <h1>Сотрудники</h1>
-            <button className="add-icon-btn mobile-only" onClick={() => setShowModalAdd(true)}>
-              <img src="/add_circle.png" alt="" />
-            </button>
-          </div>
+      <div className="dashboard-bg">
+        <main className="dashboard-container content">
+          <div className="content-header">
+            <div className="header-title">
+              <h1>Сотрудники</h1>
+              <button className="add-icon-btn mobile-only" onClick={() => setShowModalAdd(true)}>
+                <img src="/add_circle.png" alt="" />
+              </button>
+            </div>
 
-          <div className="header-actions desktop-only">
-            <button className="add-btn" onClick={() => setShowModalAdd(true)}>
-              <img src="/add_circle.png" alt="" />
-              <span className="add-text">Добавить сотрудника</span>
-            </button>
-          </div>
+            <div className="header-actions desktop-only">
+              <button className="add-btn" onClick={() => setShowModalAdd(true)}>
+                <img src="/add_circle.png" alt="" />
+                <span className="add-text">Добавить сотрудника</span>
+              </button>
+            </div>
 
-          {showModalAdd && (
-            <AddModal
-              onClose={() => setShowModalAdd(false)}
-              onSave={addEmployee}
-              existingOneCIds={employees.map(e => e.oneCId).filter(Boolean) as string[]}
-            />
-          )}
-
-          <div className="filters desktop-only">
-            <button className={!showArchive ? "active" : ""} onClick={() => setShowArchive(false)}>
-              Активные
-            </button>
-            <button className={showArchive ? "active" : ""} onClick={() => setShowArchive(true)}>
-              Заблокированные
-            </button>
-          </div>
-
-          <div className="mobile-only" ref={filterRef}>
-            <button className="filter-icon-btn" onClick={() => setFilterOpen((prev) => !prev)}>
-              <img src="/filter.png" alt="Фильтр" />
-            </button>
-
-            {filterOpen && (
-              <div className="filter-dropdown">
-                <button
-                  className={!showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(false); setFilterOpen(false); }}
-                >
-                  Активные
-                </button>
-                <button
-                  className={showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(true); setFilterOpen(false); }}
-                >
-                  Заблокированные
-                </button>
-              </div>
+            {showModalAdd && (
+              <AddModal
+                onClose={() => setShowModalAdd(false)}
+                onSave={addEmployee}
+                existingOneCIds={employees.map(e => e.oneCId).filter(Boolean) as string[]}
+              />
             )}
-          </div>
-        </div>
 
-        <div className="projects-desktop">
-          <table className="projects-table">
-            <thead>
-              <tr>
-                <th>
-                  <button type="button" className="th-sort-btn" onClick={() => handleSort("name")}>
-                    Фамилия Имя
-                    <img
-                      src="/arrow_down.png"
-                      alt=""
-                      className={`arrow ${sortDirection === "desc" ? "open" : ""}`}
-                      style={{ marginLeft: 4 }}
-                    />
+            <div className="filters desktop-only">
+              <button className={!showArchive ? "active" : ""} onClick={() => setShowArchive(false)}>
+                Активные
+              </button>
+              <button className={showArchive ? "active" : ""} onClick={() => setShowArchive(true)}>
+                Заблокированные
+              </button>
+            </div>
+
+            <div className="mobile-only" ref={filterRef}>
+              <button className="filter-icon-btn" onClick={() => setFilterOpen((prev) => !prev)}>
+                <img src="/filter.png" alt="Фильтр" />
+              </button>
+
+              {filterOpen && (
+                <div className="filter-dropdown">
+                  <button
+                    className={!showArchive ? "active" : ""}
+                    onClick={() => { setShowArchive(false); setFilterOpen(false); }}
+                  >
+                    Активные
                   </button>
-                </th>
-                <th>Логин</th>
-                <th>Статус</th>
-                <th>Действия</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {sortedEmployees.map((employee) => (
-                <tr key={employee.id}>
-                  <td className="name">{employee.lastName} {employee.firstName}</td>
-                  <td>{employee.login}</td>
-                  <td>{employee.isBlocked ? "Заблокирован" : "Активен"}</td>
-                  <td className="status-actions">
-                    <span className="status edit" onClick={(e) => { e.stopPropagation(); openEditModal(employee as unknown as Employee); }}>
-                      Редактировать
-                    </span>
-                    <span className="status block" onClick={(e) => { e.stopPropagation(); openBlockModal(employee as unknown as Employee); }}>
-                      {employee.isBlocked ? "Разблокировать" : "Блокировать"}
-                    </span>
-                    <span className="status delete" onClick={(e) => { e.stopPropagation(); openDeleteModal(employee as unknown as Employee); }}>
-                      Удалить
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="employees-mobile">
-          {filteredEmployees.map(employee => (
-            <div key={employee.id} className="employee-card">
-              <div className="employee-info">
-                <div className="employee-name">
-                  {employee.lastName} {employee.firstName}
+                  <button
+                    className={showArchive ? "active" : ""}
+                    onClick={() => { setShowArchive(true); setFilterOpen(false); }}
+                  >
+                    Заблокированные
+                  </button>
                 </div>
-                <div className="employee-credentials">
-                  <div className="employee-login">{employee.login}</div>
-                  <div className="employee-login">
-                    {employee.isBlocked ? "заблокирован" : "активен"}
+              )}
+            </div>
+          </div>
+
+          <div className="projects-desktop">
+            <table className="projects-table">
+              <thead>
+                <tr>
+                  <th>
+                    <button type="button" className="th-sort-btn" onClick={() => handleSort("name")}>
+                      Фамилия Имя
+                      <img
+                        src="/arrow_down.png"
+                        alt=""
+                        className={`arrow ${sortDirection === "desc" ? "open" : ""}`}
+                        style={{ marginLeft: 4 }}
+                      />
+                    </button>
+                  </th>
+                  <th>Логин</th>
+                  <th>Статус</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {sortedEmployees.map((employee) => (
+                  <tr key={employee.id}>
+                    <td className="name">{employee.lastName} {employee.firstName}</td>
+                    <td>{employee.login}</td>
+                    <td>{employee.isBlocked ? "Заблокирован" : "Активен"}</td>
+                    <td className="status-actions">
+                      <span className="status edit" onClick={(e) => { e.stopPropagation(); openEditModal(employee as unknown as Employee); }}>
+                        Редактировать
+                      </span>
+                      <span className="status block" onClick={(e) => { e.stopPropagation(); openBlockModal(employee as unknown as Employee); }}>
+                        {employee.isBlocked ? "Разблокировать" : "Блокировать"}
+                      </span>
+                      <span className="status delete" onClick={(e) => { e.stopPropagation(); openDeleteModal(employee as unknown as Employee); }}>
+                        Удалить
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="employees-mobile">
+            {filteredEmployees.map(employee => (
+              <div key={employee.id} className="employee-card">
+                <div className="employee-info">
+                  <div className="employee-name">
+                    {employee.lastName} {employee.firstName}
+                  </div>
+                  <div className="employee-credentials">
+                    <div className="employee-login">{employee.login}</div>
+                    <div className="employee-login">
+                      {employee.isBlocked ? "заблокирован" : "активен"}
+                    </div>
                   </div>
                 </div>
+
+                <div className="employee-actions">
+                  <img src="/edit.png" alt="Редактировать" onClick={() => openEditModal(employee as unknown as Employee)} />
+                  <img src="/lock.png" alt="Блокировать" onClick={() => openBlockModal(employee as unknown as Employee)} />
+                  <img src="/trash.png" alt="Удалить" onClick={() => openDeleteModal(employee as unknown as Employee)} />
+                </div>
               </div>
+            ))}
+          </div>
 
-              <div className="employee-actions">
-                <img src="/edit.png" alt="Редактировать" onClick={() => openEditModal(employee as unknown as Employee)} />
-                <img src="/lock.png" alt="Блокировать" onClick={() => openBlockModal(employee as unknown as Employee)} />
-                <img src="/trash.png" alt="Удалить" onClick={() => openDeleteModal(employee as unknown as Employee)} />
-              </div>
-            </div>
-          ))}
-        </div>
+          {showModalEdit && selectedEmployee && (
+            <EditModal employee={selectedEmployee} onClose={() => setShowModalEdit(false)} onSave={editEmployee} />
+          )}
 
-        {showModalEdit && selectedEmployee && (
-          <EditModal employee={selectedEmployee} onClose={() => setShowModalEdit(false)} onSave={editEmployee} />
-        )}
+          {showModalBlock && selectedEmployee && (
+            <BlockModal employee={selectedEmployee} onClose={() => setShowModalBlock(false)} onBlock={toggleBlockEmployee} />
+          )}
 
-        {showModalBlock && selectedEmployee && (
-          <BlockModal employee={selectedEmployee} onClose={() => setShowModalBlock(false)} onBlock={toggleBlockEmployee} />
-        )}
-
-        {showModalDelete && selectedEmployee && (
-          <DeleteModal employee={selectedEmployee} onClose={() => setShowModalDelete(false)} onDelete={deleteEmployee} />
-        )}
-
-      </main>
+          {showModalDelete && selectedEmployee && (
+            <DeleteModal employee={selectedEmployee} onClose={() => setShowModalDelete(false)} onDelete={deleteEmployee} />
+          )}
+        </main>
+      </div>
     </div>
   );
 }

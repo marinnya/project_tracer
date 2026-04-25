@@ -134,17 +134,6 @@ body {
   border-top: 1px solid #eee;
 }
 
-/*.arrow-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-}
-
-.arrow-btn img {
-  width: 18px;
-  height: 9px;
-}*/
 .mobile-menu-trigger {
   position: relative;
 }
@@ -247,13 +236,6 @@ body {
 
 
 
-/*.user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}*/
-
-
 .content{
     padding: 32px;
 }
@@ -320,10 +302,6 @@ body {
 }
 
 
-
-
-
-
 .filters button{
     border: none;
     background: none;
@@ -366,7 +344,6 @@ body {
     background: #fff;
     border-radius: 12px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-    /*padding: 8px 0;*/
     display: flex;
     flex-direction: column;
     min-width: 120px;
@@ -385,13 +362,8 @@ body {
     background: #fff;
 }
 
-/*.filter-dropdown button:hover {
-  background: #f5f5f5;
-}*/
-
 .filter-dropdown button.active {
   color: #000;
-  /*font-weight: 600;*/
 }
 
 .filter-dropdown button + button {
@@ -447,22 +419,11 @@ body {
 }
 
 
-
-
 .status-actions {
   display: flex;
   gap: 8px;
   align-items: center;
 }
-
-/* базовый стиль — ты его уже используешь 
-.status {
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  white-space: nowrap;
-  cursor: pointer;
-}*/
 
 /* редактировать — зелёный */
 .status.edit {
@@ -521,7 +482,7 @@ body {
   margin-top: 5px;
 }
 
-/*стрелка сотрировки*/
+/*стрелка сортировки*/
 .th-sort-btn {
   all: unset;
   cursor: pointer;
@@ -534,7 +495,7 @@ body {
   width: 12px;
   opacity: 0.4;
   transition: transform 0.2s ease, opacity 0.2s ease;
-  pointer-events: none; /* важно: убирает двойные клики */
+  pointer-events: none;
 }
 
 .sort-arrow.active {
@@ -572,10 +533,8 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  /*color: #666;*/
   color: #888888;
 }
-
 
 
 .employees-mobile {
@@ -618,6 +577,7 @@ body {
   height: 16px;
   cursor: pointer;
 }
+
 @media (max-width: 768px) {
   .projects-desktop {
     display: none;
@@ -629,7 +589,6 @@ body {
 }
 
 
-
 .project-responsible img {
   width: 14px;
   height: 14px;
@@ -637,32 +596,12 @@ body {
 }
 
 
-
-
-/*.projects-table th:last-child,
-.projects-table td:last-child {
-    text-align: center;
-}*/
-
 .header-actions {
     margin-left: auto;
     display: flex;
     align-items: center;
     gap: 24px;
 }
-
-
-
-
-/*@media (max-width: 768px) {
-  .add-btn {
-    padding: 6px;
-  }
-
-  .add-text {
-    display: none;
-  }
-}*/
 
 
 /*кнопка добавить сотрудника*/
@@ -692,5 +631,40 @@ body {
 }
 
 
+/* =============================================
+   Серый фон + белый контейнер (как на ProjectPage)
+   ============================================= */
 
+/* Серый фон на всю высоту под шапкой */
+.dashboard-bg {
+  background: #f5f5f5;
+  min-height: calc(100vh - 72px);
+}
 
+/* Белый контейнер с ограниченной шириной по центру */
+.dashboard-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: #ffffff;
+  /* padding наследуется от .content (32px) */
+}
+
+/* На очень широких экранах контейнер не растягивается —
+   серые поля появляются сами за счёт margin: auto */
+@media (min-width: 1440px) {
+  .dashboard-container {
+    /* Можно добавить чуть больше внутренних отступов на больших экранах */
+    padding: 36px 48px;
+  }
+}
+
+/* На мобильных убираем лишние отступы */
+@media (max-width: 768px) {
+  .dashboard-bg {
+    background: #ffffff; /* на мобильных серый фон не нужен */
+  }
+
+  .dashboard-container {
+    padding: 16px;
+  }
+}
