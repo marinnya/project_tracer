@@ -58,10 +58,15 @@ export class ProjectsController {
   ) {
     this.logger.log(`Сохранение черновика. projectId: ${projectId}`);
 
+    this.logger.log(`fileToSection: ${body.fileToSection}`);
+    this.logger.log(`Файлов получено: ${files?.length ?? 0}`);
+
     // маппинг имя файла → подпапка (секция или __defect__<typeName>)
     const fileToSection: Record<string, string> = body.fileToSection
       ? JSON.parse(body.fileToSection)
       : {};
+
+    this.logger.log(`Маппинг: ${JSON.stringify(fileToSection)}`);
 
     // сохраняем файлы в подпапки по секциям
     if (files?.length) {
