@@ -62,7 +62,6 @@ export class ProjectsController {
     const fileToSection: Record<string, string> = body.fileToSection
       ? JSON.parse(body.fileToSection)
       : {};
-
     const fileKeys: string[] = body.fileKeys ? JSON.parse(body.fileKeys) : [];
 
     this.logger.log(`Маппинг: ${JSON.stringify(fileToSection)}`);
@@ -73,21 +72,16 @@ export class ProjectsController {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const decodedOriginalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-
         const clientKey = fileKeys[i] ?? decodedOriginalName;
         const subfolder = fileToSection[clientKey] ?? 'misc';
-
         const ext = path.extname(decodedOriginalName);
         const storedName = `${uuidv4()}${ext}`;
 
-        const uploadPath = path.join(
-          process.cwd(), 'uploads', 'tmp', String(projectId), subfolder
-        );
+        const uploadPath = path.join(process.cwd(), 'uploads', 'tmp', String(projectId), subfolder);
         fs.mkdirSync(uploadPath, { recursive: true });
         fs.writeFileSync(path.join(uploadPath, storedName), file.buffer!);
 
         clientKeyToStoredName[clientKey] = storedName;
-
         this.logger.log(`Сохранён файл: ${decodedOriginalName} → ${storedName} (папка: ${subfolder})`);
       }
     }
@@ -119,14 +113,11 @@ export class ProjectsController {
       }));
 
     await this.projectService.saveDefects(projectId, defects);
-
     const savedDefects = await this.projectService.getDefects(projectId);
 
     for (const d of defects) {
       if (!d.newPhotos?.length) continue;
-      const savedDefect = savedDefects.find(
-        sd => sd.typeId === d.typeId && sd.typeName === d.typeName
-      );
+      const savedDefect = savedDefects.find(sd => sd.typeId === d.typeId && sd.typeName === d.typeName);
       if (!savedDefect) continue;
 
       const photosWithStoredName = d.newPhotos.map(p => ({
@@ -176,16 +167,16 @@ export class ProjectsController {
       const savedPhotos = await this.projectService.getProjectPhotos(projectId);
       const savedDefects = await this.projectService.getDefects(projectId);
 
-      // плоский список фото дефектов с typeName — для точного поиска по дефекту
+      // плоский список фото дефектов с typeName и id записи — для обновления yandexPath после загрузки
       const defectPhotosFlat = savedDefects.flatMap(d =>
         d.photos.map(p => ({ ...p, typeName: d.typeName }))
       );
 
       // добавляем yandexPath и storedName к каждому фото
-      // для дефектов ищем по typeName + originalName + order — исключает коллизии между дефектами
-      // для секций ищем по section + originalName + order
+      // для дефектов: ищем по typeName + originalName + order
+      // для секций: ищем по section + originalName + order
       const photosWithMeta = photos.map(p => {
-        let match: { yandexPath: string | null; filename: string | null } | undefined;
+        let match: { id: number; yandexPath: string | null; filename: string | null } | undefined;
 
         if (p.section === 'дефекты' && p.defectTypeName) {
           const found = defectPhotosFlat.find(sp =>
@@ -193,18 +184,19 @@ export class ProjectsController {
             sp.originalName === p.originalName &&
             sp.order === p.order
           );
-          match = found ? { yandexPath: found.yandexPath, filename: found.filename } : undefined;
+          match = found ? { id: found.id, yandexPath: found.yandexPath, filename: found.filename } : undefined;
         } else {
           const found = savedPhotos.find(sp =>
             sp.section === p.section &&
             sp.originalName === p.originalName &&
             sp.order === p.order
           );
-          match = found ? { yandexPath: found.yandexPath, filename: found.filename } : undefined;
+          match = found ? { id: found.id, yandexPath: found.yandexPath, filename: found.filename } : undefined;
         }
 
         return {
           ...p,
+          dbId: match?.id ?? null,
           yandexPath: match?.yandexPath ?? null,
           storedName: match?.filename ?? null,
         };
@@ -217,7 +209,7 @@ export class ProjectsController {
         name: p.originalName,
         section: p.section,
         defectTypeName: p.defectTypeName,
-        hasYandex: !!p.yandexPath,
+        hasYandex: !!photosWithMeta.find(pm => pm.originalName === p.originalName && pm.section === p.section && pm.order === p.order)?.yandexPath,
       })))}`);
 
       const files = await this.projectService.readTempFiles(tmpDir, photosWithMeta);
@@ -230,25 +222,51 @@ export class ProjectsController {
       );
 
       // ищем переименованное имя по originalName + section + defectTypeName + order
-      const photosWithPath = photos.map(p => {
-        const match = renamedPhotos.find(r =>
+      const findRenamed = (p: typeof photos[0]) =>
+        renamedPhotos.find(r =>
           r.originalName === p.originalName &&
           r.section === p.section &&
           r.defectTypeName === p.defectTypeName &&
           r.order === p.order
         );
-        const filename = match?.filename ?? p.originalName;
-        return {
-          section: p.section,
-          defectId: null,
-          originalName: p.originalName,
-          filename,
-          yandexPath: `${body.projectName}/${p.section ?? 'дефекты'}/${filename}`,
-          order: p.order,
-        };
-      });
 
-      await this.projectService.savePhotos(projectId, photosWithPath);
+      // сохраняем секционные фото (пересоздаём)
+      const sectionPhotosWithPath = photos
+        .filter(p => p.section !== 'дефекты')
+        .map(p => {
+          const match = findRenamed(p);
+          const filename = match?.filename ?? p.originalName;
+          return {
+            section: p.section,
+            defectId: null,
+            originalName: p.originalName,
+            filename,
+            yandexPath: `${body.projectName}/${p.section ?? 'дефекты'}/${filename}`,
+            order: p.order,
+          };
+        });
+
+      await this.projectService.savePhotos(projectId, sectionPhotosWithPath);
+
+      // обновляем yandexPath для фото дефектов по id записи в БД
+      const defectPhotoUpdates = photos
+        .filter(p => p.section === 'дефекты')
+        .flatMap(p => {
+          const match = findRenamed(p);
+          const filename = match?.filename ?? p.originalName;
+          const yandexPath = `${body.projectName}/${p.section ?? 'дефекты'}/${filename}`;
+          const meta = photosWithMeta.find(pm =>
+            pm.originalName === p.originalName &&
+            pm.section === p.section &&
+            pm.defectTypeName === p.defectTypeName &&
+            pm.order === p.order
+          );
+          if (!meta?.dbId) return [];
+          return [{ id: meta.dbId, yandexPath, filename }];
+        });
+
+      await this.projectService.saveDefectPhotoYandexPaths(defectPhotoUpdates);
+
       await this.projectService.saveFolderUrl(projectId, folderUrl);
       await this.projectService.archiveProject(projectId);
       await this.projectService.sendProjectToOneC(projectId);

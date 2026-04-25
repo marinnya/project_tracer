@@ -7,6 +7,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { OneCService } from '../integrations/oneC/onec.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Logger } from '@nestjs/common';
 
 type UploadFile = {
   originalname: string;
@@ -14,12 +15,13 @@ type UploadFile = {
   path?: string;
   mimetype: string;
   section?: string | null;
-  defectTypeName?: string;  // нужен для составного ключа при дублях имён между дефектами
+  defectTypeName?: string;
   order?: number;
 };
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
   private readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk/resources';
   private readonly BATCH_SIZE = 10;
 
@@ -50,11 +52,9 @@ export class ProjectsService {
     order: number
   ): string {
     const ext = originalName.split('.').pop() ?? 'jpg';
-
     if (defectTypeName) {
       return `${defectTypeName.toLowerCase()}${order}.${ext}`;
     }
-
     const prefix = this.sectionKeyMap[section ?? ''] ?? (section ?? 'файл').toLowerCase();
     return `${prefix}${order}.${ext}`;
   }
@@ -83,11 +83,7 @@ export class ProjectsService {
   async getDefects(projectId: number) {
     return this.prisma.defect.findMany({
       where: { projectId },
-      include: {
-        photos: {
-          orderBy: { order: 'asc' },
-        },
-      },
+      include: { photos: { orderBy: { order: 'asc' } } },
       orderBy: { id: 'asc' },
     });
   }
@@ -104,7 +100,6 @@ export class ProjectsService {
     for (const d of defects) {
       const typeId = Number(d.typeId);
       const pages = Number(d.pages);
-
       if (!Number.isInteger(typeId) || typeId <= 0) continue;
       if (!Number.isInteger(pages) || pages <= 0) continue;
 
@@ -135,10 +130,8 @@ export class ProjectsService {
       where: { projectId, defectId: null },
       select: { filename: true },
     });
-
     const existingStoredNames = new Set(existing.map(p => p.filename).filter(Boolean));
     const newPhotos = photos.filter(p => p.storedName && !existingStoredNames.has(p.storedName));
-
     if (!newPhotos.length) return;
 
     return this.prisma.projectPhoto.createMany({
@@ -162,10 +155,8 @@ export class ProjectsService {
       where: { defectId },
       select: { filename: true },
     });
-
     const existingStoredNames = new Set(existing.map(p => p.filename).filter(Boolean));
     const newPhotos = photos.filter(p => p.storedName && !existingStoredNames.has(p.storedName));
-
     if (!newPhotos.length) return;
 
     return this.prisma.projectPhoto.createMany({
@@ -180,6 +171,10 @@ export class ProjectsService {
     });
   }
 
+  // читаем только НОВЫЕ файлы — те у которых нет yandexPath.
+  // если файл не найден на диске — пропускаем с предупреждением:
+  // это фото из уже загруженного проекта у которого match не сработал,
+  // оно уже есть на Яндекс.Диске и будет взято из alreadyUploaded в uploadToYandex.
   async readTempFiles(
     tmpDir: string,
     photos: {
@@ -191,17 +186,12 @@ export class ProjectsService {
       storedName?: string | null;
     }[],
   ): Promise<UploadFile[]> {
-
     const newPhotos = photos.filter(p => !p.yandexPath);
     if (!newPhotos.length) return [];
 
-    if (!fs.existsSync(tmpDir)) {
-      throw new InternalServerErrorException(
-        'Временная папка не найдена — сначала нажмите "Сохранить"'
-      );
-    }
+    const result: UploadFile[] = [];
 
-    return newPhotos.map(photo => {
+    for (const photo of newPhotos) {
       const subfolder = photo.defectTypeName
         ? `__defect__${photo.defectTypeName}`
         : (photo.section ?? 'misc');
@@ -210,21 +200,26 @@ export class ProjectsService {
       const filePath = path.join(tmpDir, subfolder, fileName);
 
       if (!fs.existsSync(filePath)) {
-        throw new InternalServerErrorException(
-          `Файл не найден во временной папке: ${photo.originalName} (storedName: ${fileName}, подпапка: ${subfolder})`
+        // файл не найден на диске — скорее всего уже был загружен на Яндекс.Диск ранее
+        this.logger.warn(
+          `Файл не найден на диске, пропускаем: ${photo.originalName} ` +
+          `(storedName: ${fileName}, подпапка: ${subfolder}) — возможно уже загружен на Яндекс.Диск`
         );
+        continue;
       }
 
-      return {
+      result.push({
         originalname: Buffer.from(photo.originalName, 'utf8').toString('latin1'),
         path: filePath,
         mimetype: 'application/octet-stream',
         section: photo.section,
-        defectTypeName: photo.defectTypeName,  // прокидываем для составного ключа
+        defectTypeName: photo.defectTypeName,
         order: photo.order,
         buffer: undefined,
-      } as UploadFile;
-    });
+      });
+    }
+
+    return result;
   }
 
   async uploadToYandex(
@@ -242,11 +237,10 @@ export class ProjectsService {
     folderUrl: string;
     renamedPhotos: { originalName: string; section: string | null; defectTypeName?: string; order: number; filename: string }[];
   }> {
-
     await this.createFolder(projectName);
 
     const folders = new Set<string>();
-    photos.forEach(p => folders.add(p.section ?? 'Дефекты'));
+    photos.forEach(p => folders.add(p.section ?? 'дефекты'));
     for (const folder of folders) {
       await this.createFolder(`${projectName}/${folder}`);
     }
@@ -255,7 +249,6 @@ export class ProjectsService {
     const alreadyUploaded = photos.filter(p => p.yandexPath);
 
     // составной ключ: originalName + section + defectTypeName + order
-    // исключает коллизии при одинаковых именах файлов в разных секциях и между дефектами
     const photoMap = new Map<string, { section: string | null; order: number; defectTypeName?: string }>();
     for (const photo of newPhotos) {
       const key = `${photo.originalName}|||${photo.section ?? ''}|||${photo.defectTypeName ?? ''}|||${photo.order}`;
@@ -268,9 +261,16 @@ export class ProjectsService {
 
     const renamedPhotos: { originalName: string; section: string | null; defectTypeName?: string; order: number; filename: string }[] = [];
 
+    // уже загруженные — берём имя из существующего yandexPath
     for (const p of alreadyUploaded) {
       const existingFilename = p.yandexPath!.split('/').pop() ?? p.originalName;
-      renamedPhotos.push({ originalName: p.originalName, section: p.section, defectTypeName: p.defectTypeName, order: p.order, filename: existingFilename });
+      renamedPhotos.push({
+        originalName: p.originalName,
+        section: p.section,
+        defectTypeName: p.defectTypeName,
+        order: p.order,
+        filename: existingFilename,
+      });
     }
 
     for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
@@ -310,6 +310,7 @@ export class ProjectsService {
     return { message: 'Файлы успешно загружены', folderUrl, renamedPhotos };
   }
 
+  // сохраняет yandexPath для секционных фото (пересоздаёт записи)
   async savePhotos(
     projectId: number,
     photos: {
@@ -321,6 +322,7 @@ export class ProjectsService {
       order: number;
     }[]
   ) {
+    // пересоздаём только секционные фото (не дефекты)
     await this.prisma.projectPhoto.deleteMany({
       where: { projectId, defectId: null },
     });
@@ -328,6 +330,21 @@ export class ProjectsService {
     return this.prisma.projectPhoto.createMany({
       data: photos.map(p => ({ ...p, projectId })),
     });
+  }
+
+  // обновляет yandexPath для фото дефектов по id записи
+  async saveDefectPhotoYandexPaths(
+    updates: { id: number; yandexPath: string; filename: string }[]
+  ) {
+    if (!updates.length) return;
+    await Promise.all(
+      updates.map(u =>
+        this.prisma.projectPhoto.update({
+          where: { id: u.id },
+          data: { yandexPath: u.yandexPath, filename: u.filename },
+        })
+      )
+    );
   }
 
   private async uploadFile(file: UploadFile, folderPath: string): Promise<void> {
@@ -347,10 +364,8 @@ export class ProjectsService {
 
   private async getPublicUrl(folderName: string): Promise<string> {
     const encodedPath = encodeURIComponent(folderName);
-
     await axios.put(`${this.baseUrl}/publish?path=${encodedPath}`, undefined, { headers: this.getHeaders() });
     const { data } = await axios.get(`${this.baseUrl}?path=${encodedPath}`, { headers: this.getHeaders() });
-
     return data.public_url;
   }
 
@@ -426,7 +441,6 @@ export class ProjectsService {
   async sendProjectToOneC(projectId: number) {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project || !project.oneCId) return;
-
     await this.oneCService.sendProjectUpdate({
       oneCId: project.oneCId,
       startDate: project.startDate,
@@ -436,9 +450,7 @@ export class ProjectsService {
   }
 
   async getDraft(projectId: number) {
-    const draft = await this.prisma.projectDraft.findUnique({
-      where: { projectId },
-    });
+    const draft = await this.prisma.projectDraft.findUnique({ where: { projectId } });
     return draft?.sections ?? null;
   }
 }
