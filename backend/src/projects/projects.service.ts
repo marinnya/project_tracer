@@ -131,7 +131,7 @@ export class ProjectsService {
   }
 
   // сохраняет метаданные новых фото секций (без дефектов)
-  // storedName — UUID-имя файла на диске (null для уже сохранённых фото из БД)
+  // storedName — UUID-имя файла на диске; null для уже сохранённых фото (они пропускаются)
   async saveTempPhotos(
     projectId: number,
     photos: { section: string; originalName: string; storedName: string | null; order: number }[],
@@ -141,8 +141,8 @@ export class ProjectsService {
       select: { filename: true },
     });
 
-    // фильтруем по storedName — UUID всегда уникален, поэтому дублей быть не может
-    // фото без storedName (уже сохранённые из БД) пропускаем
+    // фильтруем по storedName — UUID всегда уникален, дублей быть не может
+    // фото без storedName (уже сохранённые из БД) пропускаем — они не новые
     const existingStoredNames = new Set(existing.map(p => p.filename).filter(Boolean));
     const newPhotos = photos.filter(p => p.storedName && !existingStoredNames.has(p.storedName));
 
@@ -161,7 +161,7 @@ export class ProjectsService {
   }
 
   // сохраняет метаданные новых фото дефекта
-  // storedName — UUID-имя файла на диске (null для уже сохранённых фото из БД)
+  // storedName — UUID-имя файла на диске; null для уже сохранённых фото (они пропускаются)
   async saveTempDefectPhotos(
     defectId: number,
     projectId: number,
@@ -228,7 +228,7 @@ export class ProjectsService {
       }
 
       return {
-        // передаём originalName в latin1 — uploadToYandex декодирует обратно
+        // передаём originalName в latin1 — uploadToYandex декодирует обратно в utf8
         originalname: Buffer.from(photo.originalName, 'utf8').toString('latin1'),
         path: filePath,
         mimetype: 'application/octet-stream',
@@ -265,7 +265,6 @@ export class ProjectsService {
     const alreadyUploaded = photos.filter(p => p.yandexPath);
 
     // map для быстрого поиска метаданных новых файлов по originalName
-    // порядок в массиве соответствует порядку в files — используем index для точного сопоставления
     const photoMap = new Map<string, { section: string | null; order: number; defectTypeName?: string }>();
     for (const photo of newPhotos) {
       photoMap.set(photo.originalName, {
@@ -295,7 +294,7 @@ export class ProjectsService {
           const order = meta?.order ?? i + 1;
           const defectTypeName = meta?.defectTypeName;
 
-          // имя на Яндекс Диске — по-прежнему читаемое: титульный1.jpg, техданные2.jpg и т.д.
+          // имя на Яндекс Диске — читаемое: титульный1.jpg, техданные2.jpg и т.д.
           const renamedFilename = this.getRenamedFilename(originalName, section, defectTypeName, order);
           renamedPhotos.push({ originalName, filename: renamedFilename });
 

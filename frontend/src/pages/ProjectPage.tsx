@@ -178,28 +178,31 @@ function ProjectPage({ onLogout }: Props) {
     })));
   };
 
-  // строим уникальный clientKey для файла: "originalName|||глобальный_индекс"
+  // строим уникальный clientKey для файла: "originalName|||globalIndex"
   // это позволяет различать файлы с одинаковыми именами в разных секциях и внутри одной секции
   const buildClientKey = (fileName: string, globalIndex: number): string => {
     return `${fileName}|||${globalIndex}`;
   };
 
-  const buildSectionPhotosMeta = () => {
+  // принимает уже готовый список fileKeys чтобы clientKey точно совпадал с тем что в formData
+  const buildSectionPhotosMeta = (
+    fileKeys: string[],
+    sectionFileStartIndex: number,
+  ) => {
     const meta: { section: string; originalName: string; clientKey: string; order: number }[] = [];
-    let globalIndex = 0;
+    let keyIndex = sectionFileStartIndex;
 
     for (const title of SECTIONS) {
       const saved = savedPhotos
         .filter(p => p.section === title)
         .sort((a, b) => a.order - b.order);
 
-      // уже сохранённые фото — clientKey не нужен (storedName берётся из БД)
+      // уже сохранённые фото — clientKey пустой (storedName берётся из БД по filename)
       saved.forEach(p => meta.push({ section: title, originalName: p.originalName, clientKey: '', order: p.order }));
 
-      // новые файлы — clientKey уникален для каждого файла
+      // новые файлы — clientKey берём из готового списка fileKeys
       sections[title].files.forEach((file, i) => {
-        const clientKey = buildClientKey(file.name, globalIndex++);
-        meta.push({ section: title, originalName: file.name, clientKey, order: saved.length + i + 1 });
+        meta.push({ section: title, originalName: file.name, clientKey: fileKeys[keyIndex++], order: saved.length + i + 1 });
       });
     }
 
@@ -245,43 +248,56 @@ function ProjectPage({ onLogout }: Props) {
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
-      // маппинг: clientKey → секция
+      // маппинг clientKey → секция
       // clientKey = "originalName|||globalIndex" — уникален даже для файлов с одинаковыми именами
       const fileToSection: Record<string, string> = {};
+      // fileKeys — список clientKey в том же порядке что и файлы в formData
+      // бэкенд сопоставляет files[i] ↔ fileKeys[i] по индексу
+      const fileKeys: string[] = [];
       let globalIndex = 0;
 
+      // добавляем файлы секций — поле "files" (multer ждёт это имя поля)
       for (const title of SECTIONS) {
         sections[title].files.forEach(file => {
           const clientKey = buildClientKey(file.name, globalIndex++);
-          // передаём clientKey как fieldname файла — бэкенд читает его из file.fieldname
-          formData.append(clientKey, file);
+          formData.append("files", file);
+          fileKeys.push(clientKey);
           fileToSection[clientKey] = title;
         });
       }
 
+      // запоминаем сколько файлов секций добавили — для дефектов
+      const sectionFilesCount = fileKeys.length;
+
+      // добавляем файлы дефектов
       for (const d of defects) {
         d.files.forEach(file => {
           const clientKey = buildClientKey(file.name, globalIndex++);
-          formData.append(clientKey, file);
+          formData.append("files", file);
+          fileKeys.push(clientKey);
           fileToSection[clientKey] = `__defect__${d.typeName}`;
         });
       }
 
-      // передаём маппинг на бэкенд
+      // передаём маппинги на бэкенд
       formData.append("fileToSection", JSON.stringify(fileToSection));
-      formData.append("sectionPhotos", JSON.stringify(buildSectionPhotosMeta()));
+      // fileKeys передаём отдельно — бэкенд сопоставляет по индексу с массивом files
+      formData.append("fileKeys", JSON.stringify(fileKeys));
+      // передаём метаданные фото с clientKey для сопоставления с storedName
+      formData.append("sectionPhotos", JSON.stringify(buildSectionPhotosMeta(fileKeys, 0)));
 
+      // для дефектов clientKey берём из fileKeys начиная с sectionFilesCount
+      let defectKeyIndex = sectionFilesCount;
       const defectsData = defects.map(d => {
-        let defectGlobalIndex = globalIndex; // продолжаем нумерацию
+        const savedDef = savedDefects.find(sd => sd.id === d.id);
+        const savedCount = savedDef?.photos.length ?? 0;
         return {
           id: d.id > 0 ? d.id : undefined,
           typeId: d.typeId,
           typeName: d.typeName,
           pages: d.pages,
           newPhotos: d.files.map((file, i) => {
-            const savedDef = savedDefects.find(sd => sd.id === d.id);
-            const savedCount = savedDef?.photos.length ?? 0;
-            const clientKey = buildClientKey(file.name, defectGlobalIndex++);
+            const clientKey = fileKeys[defectKeyIndex++];
             return { originalName: file.name, clientKey, order: savedCount + i + 1 };
           }),
         };
