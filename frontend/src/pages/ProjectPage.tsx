@@ -303,11 +303,11 @@ function ProjectPage({ onLogout }: Props) {
   const handleFinalSubmit = async () => {
     setError(null);
 
+    // валидация...
     for (const title of SECTIONS) {
       const s = sections[title];
       const savedCount = savedPhotos.filter(p => p.section === title).length;
       const totalFiles = s.files.length + savedCount;
-
       if (totalFiles !== s.pages) {
         setError(`Раздел "${title}": выбрано ${totalFiles} файлов, а указано ${s.pages}`);
         return;
@@ -319,7 +319,6 @@ function ProjectPage({ onLogout }: Props) {
       const savedDef = savedDefects.find(sd => sd.id === d.id);
       const savedCount = savedDef?.photos.length ?? 0;
       const totalFiles = d.files.length + savedCount;
-
       if (totalFiles !== Number(d.pages)) {
         setError(`Дефект №${defects.indexOf(d) + 1}: выбрано ${totalFiles} файлов, а указано ${d.pages}`);
         return;
@@ -330,13 +329,18 @@ function ProjectPage({ onLogout }: Props) {
       setIsUploading(true);
       setUploadProgress(0);
 
+      // строим метаданные ДО сохранения — пока файлы ещё не очищены
+      const uploadMeta = buildAllPhotosForUpload();
+
+      // сохраняем файлы на сервер
       await handleSave();
 
+      // передаём метаданные которые построили ДО очистки файлов
       await api.post(
         `/projects/${id}/upload`,
         {
           projectName: project.name,
-          photos: JSON.stringify(buildAllPhotosForUpload()),
+          photos: JSON.stringify(uploadMeta),
         },
         {
           onUploadProgress: (progressEvent) => {
