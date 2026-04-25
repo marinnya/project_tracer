@@ -199,7 +199,6 @@ export class ProjectsService {
     }
 
     return newPhotos.map(photo => {
-      // определяем подпапку по секции или типу дефекта
       const subfolder = photo.defectTypeName
         ? `__defect__${photo.defectTypeName}`
         : (photo.section ?? 'misc');

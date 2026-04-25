@@ -71,12 +71,14 @@ export class ProjectsController {
     // сохраняем файлы в подпапки по секциям
     if (files?.length) {
       for (const file of files) {
-        const subfolder = fileToSection[file.originalname] ?? 'misc';
+        // декодируем имя файла из latin1 в utf8
+        const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        const subfolder = fileToSection[decodedName] ?? 'misc';
         const uploadPath = path.join(
           process.cwd(), 'uploads', 'tmp', String(projectId), subfolder
         );
         fs.mkdirSync(uploadPath, { recursive: true });
-        const filePath = path.join(uploadPath, file.originalname);
+        const filePath = path.join(uploadPath, decodedName);
         fs.writeFileSync(filePath, file.buffer!);
       }
     }
