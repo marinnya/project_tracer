@@ -246,7 +246,7 @@ export class ProjectsService {
     await this.createFolder(projectName);
 
     const folders = new Set<string>();
-    photos.forEach(p => folders.add(p.section ?? 'дефекты'));
+    photos.forEach(p => folders.add(p.section ?? 'Дефекты'));
     for (const folder of folders) {
       await this.createFolder(`${projectName}/${folder}`);
     }

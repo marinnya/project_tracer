@@ -338,6 +338,12 @@ function ProjectPage({ onLogout }: Props) {
   const handleFinalSubmit = async () => {
     setError(null);
 
+    // Проверка заполнения даты окончания
+    if (!endDate) {
+      setError("Укажите дату окончания перед записью");
+      return;
+    }
+
     // валидация...
     for (const title of SECTIONS) {
       const s = sections[title];
