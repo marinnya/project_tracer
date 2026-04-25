@@ -135,11 +135,12 @@ export class ProjectsService {
   ) {
     const existing = await this.prisma.projectPhoto.findMany({
       where: { projectId, defectId: null },
-      select: { originalName: true },
+      select: { originalName: true, section: true },
     });
 
-    const existingNames = new Set(existing.map(p => p.originalName));
-    const newPhotos = photos.filter(p => !existingNames.has(p.originalName));
+    // фильтруем по комбинации originalName + section
+    const existingKeys = new Set(existing.map(p => `${p.section}||${p.originalName}`));
+    const newPhotos = photos.filter(p => !existingKeys.has(`${p.section}||${p.originalName}`));
 
     if (!newPhotos.length) return;
 
