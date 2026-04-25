@@ -29,19 +29,16 @@ export class ProjectsController {
 
   constructor(private readonly projectService: ProjectsService) {}
 
-  // получить фото обычных секций проекта
   @Get(':id/photos')
   async getPhotos(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getProjectPhotos(projectId);
   }
 
-  // получить дефекты проекта с фото
   @Get(':id/defects')
   async getDefects(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getDefects(projectId);
   }
 
-  // сохранить черновик
   @Patch(':id/save')
   @UseInterceptors(FilesInterceptor('files', 200, {
     storage: multer.memoryStorage(),
@@ -162,7 +159,6 @@ export class ProjectsController {
     return { message: 'Черновик сохранён' };
   }
 
-  // загрузка на Яндекс.Диск
   @Post(':id/upload')
   async uploadFiles(
     @Param('id', ParseIntPipe) projectId: number,
@@ -180,22 +176,33 @@ export class ProjectsController {
       const savedPhotos = await this.projectService.getProjectPhotos(projectId);
       const savedDefects = await this.projectService.getDefects(projectId);
 
-      const allSavedPhotos = [
-        ...savedPhotos,
-        ...savedDefects.flatMap(d => d.photos),
-      ];
+      // плоский список фото дефектов с typeName — для точного поиска по дефекту
+      const defectPhotosFlat = savedDefects.flatMap(d =>
+        d.photos.map(p => ({ ...p, typeName: d.typeName }))
+      );
 
-      // добавляем yandexPath и storedName к каждому фото из запроса
-      // ищем совпадение по originalName + section + order чтобы избежать коллизий при одинаковых именах
+      // добавляем yandexPath и storedName к каждому фото
+      // для дефектов ищем по typeName + originalName + order — исключает коллизии между дефектами
+      // для секций ищем по section + originalName + order
       const photosWithMeta = photos.map(p => {
-        const match = allSavedPhotos.find(sp =>
-          sp.originalName === p.originalName &&
-          sp.order === p.order &&
-          (
-            sp.section === p.section ||
-            (p.section === 'дефекты' && sp.defectId != null)
-          )
-        );
+        let match: { yandexPath: string | null; filename: string | null } | undefined;
+
+        if (p.section === 'дефекты' && p.defectTypeName) {
+          const found = defectPhotosFlat.find(sp =>
+            sp.typeName === p.defectTypeName &&
+            sp.originalName === p.originalName &&
+            sp.order === p.order
+          );
+          match = found ? { yandexPath: found.yandexPath, filename: found.filename } : undefined;
+        } else {
+          const found = savedPhotos.find(sp =>
+            sp.section === p.section &&
+            sp.originalName === p.originalName &&
+            sp.order === p.order
+          );
+          match = found ? { yandexPath: found.yandexPath, filename: found.filename } : undefined;
+        }
+
         return {
           ...p,
           yandexPath: match?.yandexPath ?? null,
@@ -206,7 +213,12 @@ export class ProjectsController {
       const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
 
       this.logger.log(`Всего фото в запросе: ${photos.length}`);
-      this.logger.log(`Фото: ${JSON.stringify(photos.map(p => ({ name: p.originalName, section: p.section, hasYandex: !!p.yandexPath })))}`);
+      this.logger.log(`Фото: ${JSON.stringify(photos.map(p => ({
+        name: p.originalName,
+        section: p.section,
+        defectTypeName: p.defectTypeName,
+        hasYandex: !!p.yandexPath,
+      })))}`);
 
       const files = await this.projectService.readTempFiles(tmpDir, photosWithMeta);
       this.logger.log(`Файлов для загрузки: ${files.length}`);
@@ -217,9 +229,14 @@ export class ProjectsController {
         photosWithMeta,
       );
 
-      // ищем переименованное имя по originalName + section — избегаем коллизий
+      // ищем переименованное имя по originalName + section + defectTypeName + order
       const photosWithPath = photos.map(p => {
-        const match = renamedPhotos.find(r => r.originalName === p.originalName && r.section === p.section);
+        const match = renamedPhotos.find(r =>
+          r.originalName === p.originalName &&
+          r.section === p.section &&
+          r.defectTypeName === p.defectTypeName &&
+          r.order === p.order
+        );
         const filename = match?.filename ?? p.originalName;
         return {
           section: p.section,

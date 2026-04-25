@@ -13,7 +13,9 @@ type UploadFile = {
   buffer?: Buffer;
   path?: string;
   mimetype: string;
-  section?: string | null; // секция файла — нужна для составного ключа при дублях имён
+  section?: string | null;
+  defectTypeName?: string;  // нужен для составного ключа при дублях имён между дефектами
+  order?: number;
 };
 
 @Injectable()
@@ -71,7 +73,6 @@ export class ProjectsService {
     }
   }
 
-  // получить фото обычных секций проекта
   async getProjectPhotos(projectId: number) {
     return this.prisma.projectPhoto.findMany({
       where: { projectId, defectId: null },
@@ -79,7 +80,6 @@ export class ProjectsService {
     });
   }
 
-  // получить дефекты проекта с их фото
   async getDefects(projectId: number) {
     return this.prisma.defect.findMany({
       where: { projectId },
@@ -92,7 +92,6 @@ export class ProjectsService {
     });
   }
 
-  // сохранить/обновить дефекты проекта
   async saveDefects(projectId: number, defects: {
     id?: number;
     typeId: number;
@@ -128,7 +127,6 @@ export class ProjectsService {
     }
   }
 
-  // сохраняет метаданные новых фото секций (без дефектов)
   async saveTempPhotos(
     projectId: number,
     photos: { section: string; originalName: string; storedName: string | null; order: number }[],
@@ -155,7 +153,6 @@ export class ProjectsService {
     });
   }
 
-  // сохраняет метаданные новых фото дефекта
   async saveTempDefectPhotos(
     defectId: number,
     projectId: number,
@@ -183,13 +180,13 @@ export class ProjectsService {
     });
   }
 
-  // читаем только НОВЫЕ файлы — те у которых ещё нет yandexPath
   async readTempFiles(
     tmpDir: string,
     photos: {
       originalName: string;
       section: string | null;
       defectTypeName?: string;
+      order?: number;
       yandexPath?: string | null;
       storedName?: string | null;
     }[],
@@ -222,8 +219,9 @@ export class ProjectsService {
         originalname: Buffer.from(photo.originalName, 'utf8').toString('latin1'),
         path: filePath,
         mimetype: 'application/octet-stream',
-        // прокидываем секцию — нужна для составного ключа в uploadToYandex
         section: photo.section,
+        defectTypeName: photo.defectTypeName,  // прокидываем для составного ключа
+        order: photo.order,
         buffer: undefined,
       } as UploadFile;
     });
@@ -239,15 +237,16 @@ export class ProjectsService {
       order: number;
       yandexPath?: string | null;
     }[],
-  ): Promise<{ message: string; folderUrl: string; renamedPhotos: { originalName: string; section: string | null; filename: string }[] }> {
+  ): Promise<{
+    message: string;
+    folderUrl: string;
+    renamedPhotos: { originalName: string; section: string | null; defectTypeName?: string; order: number; filename: string }[];
+  }> {
 
-    // создаём корневую папку проекта
     await this.createFolder(projectName);
 
-    // создаём подпапки последовательно
     const folders = new Set<string>();
     photos.forEach(p => folders.add(p.section ?? 'дефекты'));
-
     for (const folder of folders) {
       await this.createFolder(`${projectName}/${folder}`);
     }
@@ -255,10 +254,11 @@ export class ProjectsService {
     const newPhotos = photos.filter(p => !p.yandexPath);
     const alreadyUploaded = photos.filter(p => p.yandexPath);
 
-    // составной ключ: originalName + section — исключает коллизии при одинаковых именах в разных секциях
+    // составной ключ: originalName + section + defectTypeName + order
+    // исключает коллизии при одинаковых именах файлов в разных секциях и между дефектами
     const photoMap = new Map<string, { section: string | null; order: number; defectTypeName?: string }>();
     for (const photo of newPhotos) {
-      const key = `${photo.originalName}|||${photo.section ?? photo.defectTypeName ?? ''}`;
+      const key = `${photo.originalName}|||${photo.section ?? ''}|||${photo.defectTypeName ?? ''}|||${photo.order}`;
       photoMap.set(key, {
         section: photo.section,
         order: photo.order,
@@ -266,31 +266,31 @@ export class ProjectsService {
       });
     }
 
-    const renamedPhotos: { originalName: string; section: string | null; filename: string }[] = [];
+    const renamedPhotos: { originalName: string; section: string | null; defectTypeName?: string; order: number; filename: string }[] = [];
 
-    // уже загруженные — берём имя файла из существующего yandexPath
     for (const p of alreadyUploaded) {
       const existingFilename = p.yandexPath!.split('/').pop() ?? p.originalName;
-      renamedPhotos.push({ originalName: p.originalName, section: p.section, filename: existingFilename });
+      renamedPhotos.push({ originalName: p.originalName, section: p.section, defectTypeName: p.defectTypeName, order: p.order, filename: existingFilename });
     }
 
-    // загружаем только новые файлы батчами по BATCH_SIZE
     for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
       const batch = files.slice(i, i + this.BATCH_SIZE);
 
       await Promise.all(
         batch.map(file => {
           const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-          // используем section из файла (прокинута из readTempFiles) для составного ключа
           const fileSection = file.section ?? 'дефекты';
-          const key = `${originalName}|||${fileSection}`;
+          const fileDefectTypeName = file.defectTypeName;
+          const fileOrder = file.order ?? i + 1;
+          const key = `${originalName}|||${fileSection}|||${fileDefectTypeName ?? ''}|||${fileOrder}`;
           const meta = photoMap.get(key);
+
           const section = meta?.section ?? fileSection;
-          const order = meta?.order ?? i + 1;
-          const defectTypeName = meta?.defectTypeName;
+          const order = meta?.order ?? fileOrder;
+          const defectTypeName = meta?.defectTypeName ?? fileDefectTypeName;
 
           const renamedFilename = this.getRenamedFilename(originalName, section, defectTypeName, order);
-          renamedPhotos.push({ originalName, section, filename: renamedFilename });
+          renamedPhotos.push({ originalName, section, defectTypeName, order, filename: renamedFilename });
 
           const folderPath = `${projectName}/${section}`;
           const renamedFile: UploadFile = {
