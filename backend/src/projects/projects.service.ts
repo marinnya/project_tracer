@@ -13,6 +13,7 @@ type UploadFile = {
   buffer?: Buffer;
   path?: string;
   mimetype: string;
+  section?: string | null; // секция файла — нужна для составного ключа при дублях имён
 };
 
 @Injectable()
@@ -70,8 +71,6 @@ export class ProjectsService {
     }
   }
 
-  
-
   // получить фото обычных секций проекта
   async getProjectPhotos(projectId: number) {
     return this.prisma.projectPhoto.findMany({
@@ -107,7 +106,6 @@ export class ProjectsService {
       const typeId = Number(d.typeId);
       const pages = Number(d.pages);
 
-      // корректная проверка
       if (!Number.isInteger(typeId) || typeId <= 0) continue;
       if (!Number.isInteger(pages) || pages <= 0) continue;
 
@@ -131,7 +129,6 @@ export class ProjectsService {
   }
 
   // сохраняет метаданные новых фото секций (без дефектов)
-  // storedName — UUID-имя файла на диске; null для уже сохранённых фото (они пропускаются)
   async saveTempPhotos(
     projectId: number,
     photos: { section: string; originalName: string; storedName: string | null; order: number }[],
@@ -141,8 +138,6 @@ export class ProjectsService {
       select: { filename: true },
     });
 
-    // фильтруем по storedName — UUID всегда уникален, дублей быть не может
-    // фото без storedName (уже сохранённые из БД) пропускаем — они не новые
     const existingStoredNames = new Set(existing.map(p => p.filename).filter(Boolean));
     const newPhotos = photos.filter(p => p.storedName && !existingStoredNames.has(p.storedName));
 
@@ -154,14 +149,13 @@ export class ProjectsService {
         section: p.section,
         originalName: p.originalName,
         order: p.order,
-        filename: p.storedName,  // UUID-имя файла на диске
+        filename: p.storedName,
         yandexPath: null,
       })),
     });
   }
 
   // сохраняет метаданные новых фото дефекта
-  // storedName — UUID-имя файла на диске; null для уже сохранённых фото (они пропускаются)
   async saveTempDefectPhotos(
     defectId: number,
     projectId: number,
@@ -172,7 +166,6 @@ export class ProjectsService {
       select: { filename: true },
     });
 
-    // фильтруем по storedName — UUID всегда уникален
     const existingStoredNames = new Set(existing.map(p => p.filename).filter(Boolean));
     const newPhotos = photos.filter(p => p.storedName && !existingStoredNames.has(p.storedName));
 
@@ -184,14 +177,13 @@ export class ProjectsService {
         defectId,
         originalName: p.originalName,
         order: p.order,
-        filename: p.storedName,  // UUID-имя файла на диске
+        filename: p.storedName,
         yandexPath: null,
       })),
     });
   }
 
   // читаем только НОВЫЕ файлы — те у которых ещё нет yandexPath
-  // файл ищем по storedName (UUID) в подпапке секции
   async readTempFiles(
     tmpDir: string,
     photos: {
@@ -201,7 +193,7 @@ export class ProjectsService {
       yandexPath?: string | null;
       storedName?: string | null;
     }[],
-  ): Promise<Express.Multer.File[]> {
+  ): Promise<UploadFile[]> {
 
     const newPhotos = photos.filter(p => !p.yandexPath);
     if (!newPhotos.length) return [];
@@ -217,7 +209,6 @@ export class ProjectsService {
         ? `__defect__${photo.defectTypeName}`
         : (photo.section ?? 'misc');
 
-      // ищем файл по storedName (UUID) если он есть, иначе по originalName (обратная совместимость)
       const fileName = photo.storedName ?? photo.originalName;
       const filePath = path.join(tmpDir, subfolder, fileName);
 
@@ -228,12 +219,13 @@ export class ProjectsService {
       }
 
       return {
-        // передаём originalName в latin1 — uploadToYandex декодирует обратно в utf8
         originalname: Buffer.from(photo.originalName, 'utf8').toString('latin1'),
         path: filePath,
         mimetype: 'application/octet-stream',
+        // прокидываем секцию — нужна для составного ключа в uploadToYandex
+        section: photo.section,
         buffer: undefined,
-      } as unknown as Express.Multer.File;
+      } as UploadFile;
     });
   }
 
@@ -247,12 +239,12 @@ export class ProjectsService {
       order: number;
       yandexPath?: string | null;
     }[],
-  ): Promise<{ message: string; folderUrl: string; renamedPhotos: { originalName: string; filename: string }[] }> {
+  ): Promise<{ message: string; folderUrl: string; renamedPhotos: { originalName: string; section: string | null; filename: string }[] }> {
 
     // создаём корневую папку проекта
     await this.createFolder(projectName);
 
-    // создаём подпапки последовательно — гарантирует что каждая готова перед следующей
+    // создаём подпапки последовательно
     const folders = new Set<string>();
     photos.forEach(p => folders.add(p.section ?? 'дефекты'));
 
@@ -260,26 +252,26 @@ export class ProjectsService {
       await this.createFolder(`${projectName}/${folder}`);
     }
 
-    // разделяем на уже загруженные (есть yandexPath) и новые
     const newPhotos = photos.filter(p => !p.yandexPath);
     const alreadyUploaded = photos.filter(p => p.yandexPath);
 
-    // map для быстрого поиска метаданных новых файлов по originalName
+    // составной ключ: originalName + section — исключает коллизии при одинаковых именах в разных секциях
     const photoMap = new Map<string, { section: string | null; order: number; defectTypeName?: string }>();
     for (const photo of newPhotos) {
-      photoMap.set(photo.originalName, {
+      const key = `${photo.originalName}|||${photo.section ?? photo.defectTypeName ?? ''}`;
+      photoMap.set(key, {
         section: photo.section,
         order: photo.order,
         defectTypeName: photo.defectTypeName,
       });
     }
 
-    const renamedPhotos: { originalName: string; filename: string }[] = [];
+    const renamedPhotos: { originalName: string; section: string | null; filename: string }[] = [];
 
     // уже загруженные — берём имя файла из существующего yandexPath
     for (const p of alreadyUploaded) {
       const existingFilename = p.yandexPath!.split('/').pop() ?? p.originalName;
-      renamedPhotos.push({ originalName: p.originalName, filename: existingFilename });
+      renamedPhotos.push({ originalName: p.originalName, section: p.section, filename: existingFilename });
     }
 
     // загружаем только новые файлы батчами по BATCH_SIZE
@@ -289,17 +281,19 @@ export class ProjectsService {
       await Promise.all(
         batch.map(file => {
           const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-          const meta = photoMap.get(originalName);
-          const section = meta?.section ?? 'дефекты';
+          // используем section из файла (прокинута из readTempFiles) для составного ключа
+          const fileSection = file.section ?? 'дефекты';
+          const key = `${originalName}|||${fileSection}`;
+          const meta = photoMap.get(key);
+          const section = meta?.section ?? fileSection;
           const order = meta?.order ?? i + 1;
           const defectTypeName = meta?.defectTypeName;
 
-          // имя на Яндекс Диске — читаемое: титульный1.jpg, техданные2.jpg и т.д.
           const renamedFilename = this.getRenamedFilename(originalName, section, defectTypeName, order);
-          renamedPhotos.push({ originalName, filename: renamedFilename });
+          renamedPhotos.push({ originalName, section, filename: renamedFilename });
 
           const folderPath = `${projectName}/${section}`;
-          const renamedFile = {
+          const renamedFile: UploadFile = {
             ...file,
             originalname: Buffer.from(renamedFilename).toString('latin1'),
           };
@@ -327,7 +321,6 @@ export class ProjectsService {
       order: number;
     }[]
   ) {
-    // удаляем старые фото секций (не дефектов)
     await this.prisma.projectPhoto.deleteMany({
       where: { projectId, defectId: null },
     });
@@ -442,12 +435,10 @@ export class ProjectsService {
     });
   }
 
-  // возвращает сохранённые данные черновика — количество страниц секций
   async getDraft(projectId: number) {
     const draft = await this.prisma.projectDraft.findUnique({
       where: { projectId },
     });
-    // возвращаем sections или null если черновика ещё нет
     return draft?.sections ?? null;
   }
 }

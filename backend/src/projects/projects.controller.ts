@@ -41,10 +41,10 @@ export class ProjectsController {
     return this.projectService.getDefects(projectId);
   }
 
-  // сохранить черновик — файлы хранятся в памяти и сохраняются вручную в подпапки по секциям
+  // сохранить черновик
   @Patch(':id/save')
   @UseInterceptors(FilesInterceptor('files', 200, {
-    storage: multer.memoryStorage(), // храним в памяти — сохраняем вручную после получения body
+    storage: multer.memoryStorage(),
   }))
   async saveDraft(
     @Param('id', ParseIntPipe) projectId: number,
@@ -54,39 +54,32 @@ export class ProjectsController {
       sectionPhotos: string;
       defects: string;
       deletedPhotos?: string;
-      fileToSection?: string; // маппинг: clientKey → подпапка
-      fileKeys?: string;      // список clientKey в том же порядке что и files[]
+      fileToSection?: string;
+      fileKeys?: string;
     },
   ) {
     this.logger.log(`Сохранение черновика. projectId: ${projectId}`);
     this.logger.log(`fileToSection: ${body.fileToSection}`);
     this.logger.log(`Файлов получено: ${files?.length ?? 0}`);
 
-    // маппинг clientKey → подпапка (секция или __defect__<typeName>)
     const fileToSection: Record<string, string> = body.fileToSection
       ? JSON.parse(body.fileToSection)
       : {};
 
-    // список clientKey в том же порядке что и files[] — сопоставляем по индексу
     const fileKeys: string[] = body.fileKeys ? JSON.parse(body.fileKeys) : [];
 
     this.logger.log(`Маппинг: ${JSON.stringify(fileToSection)}`);
 
-    // сохраняем файлы в подпапки по секциям под UUID-именами
-    // clientKeyToStoredName: clientKey → storedName (uuid) — для передачи в saveTempPhotos
     const clientKeyToStoredName: Record<string, string> = {};
 
     if (files?.length) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        // декодируем оригинальное имя файла из latin1 в utf8
         const decodedOriginalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
 
-        // берём clientKey по индексу — он точно соответствует этому файлу
         const clientKey = fileKeys[i] ?? decodedOriginalName;
         const subfolder = fileToSection[clientKey] ?? 'misc';
 
-        // генерируем уникальное имя файла — UUID + оригинальное расширение
         const ext = path.extname(decodedOriginalName);
         const storedName = `${uuidv4()}${ext}`;
 
@@ -102,17 +95,14 @@ export class ProjectsController {
       }
     }
 
-    // сохраняем количество страниц секций
     const sections = JSON.parse(body.sections) as Record<string, { pages: number }>;
     await this.projectService.saveDraft(projectId, sections);
 
-    // удаляем помеченные фото
     const deletedPhotos = JSON.parse(body.deletedPhotos ?? '[]') as number[];
     if (deletedPhotos.length) {
       await this.projectService.deletePhotos(deletedPhotos);
     }
 
-    // сохраняем/обновляем дефекты — пропускаем незаполненные
     const rawDefects = JSON.parse(body.defects) as {
       id?: number;
       typeId: number | string;
@@ -133,10 +123,8 @@ export class ProjectsController {
 
     await this.projectService.saveDefects(projectId, defects);
 
-    // получаем актуальные дефекты из БД чтобы знать их id
     const savedDefects = await this.projectService.getDefects(projectId);
 
-    // сохраняем новые фото дефектов
     for (const d of defects) {
       if (!d.newPhotos?.length) continue;
       const savedDefect = savedDefects.find(
@@ -144,7 +132,6 @@ export class ProjectsController {
       );
       if (!savedDefect) continue;
 
-      // подставляем storedName для каждого фото дефекта по его clientKey
       const photosWithStoredName = d.newPhotos.map(p => ({
         originalName: p.originalName,
         storedName: clientKeyToStoredName[p.clientKey] ?? null,
@@ -154,7 +141,6 @@ export class ProjectsController {
       await this.projectService.saveTempDefectPhotos(savedDefect.id, projectId, photosWithStoredName);
     }
 
-    // сохраняем новые фото обычных секций
     if (body.sectionPhotos) {
       const sectionPhotos = JSON.parse(body.sectionPhotos) as {
         section: string;
@@ -163,7 +149,6 @@ export class ProjectsController {
         order: number;
       }[];
 
-      // подставляем storedName для каждого фото секции по его clientKey
       const sectionPhotosWithStoredName = sectionPhotos.map(p => ({
         section: p.section,
         originalName: p.originalName,
@@ -192,21 +177,20 @@ export class ProjectsController {
         yandexPath?: string | null;
       }[];
 
-      // загружаем актуальные фото из БД — нужно знать у каких уже есть yandexPath и storedName (filename)
       const savedPhotos = await this.projectService.getProjectPhotos(projectId);
       const savedDefects = await this.projectService.getDefects(projectId);
 
-      // плоский список всех сохранённых фото для поиска storedName
       const allSavedPhotos = [
         ...savedPhotos,
         ...savedDefects.flatMap(d => d.photos),
       ];
 
       // добавляем yandexPath и storedName к каждому фото из запроса
-      // ищем совпадение по originalName + section (для секций) или по originalName + defectId (для дефектов)
+      // ищем совпадение по originalName + section + order чтобы избежать коллизий при одинаковых именах
       const photosWithMeta = photos.map(p => {
         const match = allSavedPhotos.find(sp =>
           sp.originalName === p.originalName &&
+          sp.order === p.order &&
           (
             sp.section === p.section ||
             (p.section === 'дефекты' && sp.defectId != null)
@@ -224,7 +208,6 @@ export class ProjectsController {
       this.logger.log(`Всего фото в запросе: ${photos.length}`);
       this.logger.log(`Фото: ${JSON.stringify(photos.map(p => ({ name: p.originalName, section: p.section, hasYandex: !!p.yandexPath })))}`);
 
-      // читаем только новые файлы
       const files = await this.projectService.readTempFiles(tmpDir, photosWithMeta);
       this.logger.log(`Файлов для загрузки: ${files.length}`);
 
@@ -234,23 +217,25 @@ export class ProjectsController {
         photosWithMeta,
       );
 
-      const renamedMap = new Map(renamedPhotos.map(r => [r.originalName, r.filename]));
-
-      const photosWithPath = photos.map(p => ({
-        section: p.section,
-        defectId: null,
-        originalName: p.originalName,
-        filename: renamedMap.get(p.originalName) ?? p.originalName,
-        yandexPath: `${body.projectName}/${p.section ?? 'дефекты'}/${renamedMap.get(p.originalName) ?? p.originalName}`,
-        order: p.order,
-      }));
+      // ищем переименованное имя по originalName + section — избегаем коллизий
+      const photosWithPath = photos.map(p => {
+        const match = renamedPhotos.find(r => r.originalName === p.originalName && r.section === p.section);
+        const filename = match?.filename ?? p.originalName;
+        return {
+          section: p.section,
+          defectId: null,
+          originalName: p.originalName,
+          filename,
+          yandexPath: `${body.projectName}/${p.section ?? 'дефекты'}/${filename}`,
+          order: p.order,
+        };
+      });
 
       await this.projectService.savePhotos(projectId, photosWithPath);
       await this.projectService.saveFolderUrl(projectId, folderUrl);
       await this.projectService.archiveProject(projectId);
       await this.projectService.sendProjectToOneC(projectId);
 
-      // удаляем временную папку только если она существует
       if (fs.existsSync(tmpDir)) {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
@@ -289,7 +274,6 @@ export class ProjectsController {
     return this.projectService.updateDates(projectId, body.startDate, body.endDate);
   }
 
-  // получить черновик проекта — для восстановления количества страниц
   @Get(':id/draft')
   async getDraft(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getDraft(projectId);
