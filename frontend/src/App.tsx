@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import "./styles/login.css";
+import "./styles/spinner.css";
 import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import ProjectPage from "./pages/ProjectPage";
@@ -10,18 +11,16 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 function App() {
   const [isAuth, setIsAuth] = useState(false);
   const [role, setRole] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // пока проверяем токен — показываем загрузку
+  const [isLoading, setIsLoading] = useState(true);
 
-  // при запуске приложения проверяем токен в localStorage
   useEffect(() => {
     const token = localStorage.getItem("token");
 
     if (!token) {
-      setIsLoading(false); // токена нет — сразу на логин
+      setIsLoading(false);
       return;
     }
 
-    // проверяем токен на бэкенде
     fetch("http://localhost:3000/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -30,12 +29,10 @@ function App() {
         return res.json();
       })
       .then((data) => {
-        // токен валидный — восстанавливаем сессию
         setIsAuth(true);
         setRole(data.role);
       })
       .catch(() => {
-        // токен протух или пользователь заблокирован — чистим всё
         localStorage.clear();
       })
       .finally(() => {
@@ -54,13 +51,15 @@ function App() {
     setRole(null);
   };
 
-  // пока проверяем токен — не рендерим ничего чтобы не было мигания экрана логина
-  if (isLoading) return <div>Загрузка...</div>;
+  if (isLoading) return (
+    <div className="spinner-fullscreen">
+      <div className="spinner" />
+    </div>
+  );
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* ЛОГИН — если уже авторизован, редиректим на главную */}
         <Route
           path="/login"
           element={
@@ -70,7 +69,6 @@ function App() {
           }
         />
 
-        {/* КОРЕНЬ — только авторизованные */}
         <Route
           path="/"
           element={
@@ -78,7 +76,6 @@ function App() {
           }
         />
 
-        {/* ПРОЕКТ — только авторизованные, передаём onLogout для Header */}
         <Route
           path="/projects/:id"
           element={
@@ -86,7 +83,6 @@ function App() {
           }
         />
 
-        {/* СОТРУДНИКИ — только админ, передаём onLogout для Header */}
         <Route
           path="/employees"
           element={
@@ -96,12 +92,10 @@ function App() {
           }
         />
 
-        {/* FALLBACK */}
         <Route
           path="*"
           element={<Navigate to={isAuth ? "/" : "/login"} replace />}
         />
-
 
         <Route path="/reset-password" element={<ResetPasswordPage />} />
       </Routes>

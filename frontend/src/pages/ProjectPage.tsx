@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "../styles/project.css";
+import "../styles/spinner.css";
 import ProjectSection from "../components/ProjectSection";
 import ProjectDefectSection from "../components/ProjectDefectSection";
 import Header from "../components/Header";
@@ -36,7 +37,7 @@ type SavedPhoto = {
   defectId: number | null;
   originalName: string;
   order: number;
-  yandexPath: string | null; // если заполнен — фото уже на Яндекс.Диске
+  yandexPath: string | null;
 };
 
 type Defect = {
@@ -78,6 +79,7 @@ function ProjectPage({ onLogout }: Props) {
 
   const { id } = useParams();
   const [project, setProject] = useState<Project | null>(null);
+  const [isLoading, setIsLoading] = useState(true); // пока грузится проект
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -96,7 +98,8 @@ function ProjectPage({ onLogout }: Props) {
   useEffect(() => {
     if (!id) return;
 
-    api.get(`/projects/${id}`)
+    // грузим все данные параллельно, ждём хотя бы проект
+    const projectReq = api.get(`/projects/${id}`)
       .then(res => {
         setProject(res.data);
         setStartDate(formatDateForInput(res.data.startDate));
@@ -104,11 +107,11 @@ function ProjectPage({ onLogout }: Props) {
       })
       .catch(() => setProject(null));
 
-    api.get(`/projects/${id}/photos`)
+    const photosReq = api.get(`/projects/${id}/photos`)
       .then(res => setSavedPhotos(res.data))
       .catch(() => setSavedPhotos([]));
 
-    api.get(`/projects/${id}/draft`)
+    const draftReq = api.get(`/projects/${id}/draft`)
       .then(res => {
         const draft = res.data as Record<string, { pages: number }> | null;
         if (!draft) return;
@@ -123,7 +126,7 @@ function ProjectPage({ onLogout }: Props) {
       })
       .catch(() => {});
 
-    api.get(`/projects/${id}/defects`)
+    const defectsReq = api.get(`/projects/${id}/defects`)
       .then(res => {
         const loaded: SavedDefect[] = res.data;
         setSavedDefects(loaded);
@@ -138,9 +141,25 @@ function ProjectPage({ onLogout }: Props) {
         }
       })
       .catch(() => setSavedDefects([]));
+
+    // снимаем спиннер когда все запросы завершены
+    Promise.all([projectReq, photosReq, draftReq, defectsReq])
+      .finally(() => setIsLoading(false));
   }, [id]);
 
-  if (!project) return <div>Проект не найден</div>;
+  // показываем спиннер пока грузятся данные
+  if (isLoading) return (
+    <div className="spinner-fullscreen">
+      <div className="spinner" />
+    </div>
+  );
+
+  // проект не найден (загрузка завершена, но данных нет)
+  if (!project) return (
+    <div className="spinner-fullscreen">
+      <p style={{ color: "#999", fontSize: 15 }}>Проект не найден</p>
+    </div>
+  );
 
   const handleDatesUpdate = async (newStartDate: string, newEndDate: string) => {
     try {
