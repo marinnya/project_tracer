@@ -6,7 +6,7 @@ body {
 
 .dashboard {
     min-height: 100vh;
-    background: #ffffff;
+    background: #f5f5f5;
 }
 
 .topbar{
@@ -645,17 +645,16 @@ body {
 
 /* Белый контейнер с ограниченной шириной по центру */
 .dashboard-container {
-  max-width: 1100px;
+  max-width: 1700px;
   width: 100%;
   margin: 0 auto;
   background: #ffffff;
-  flex: 1; /* растягивается до низа страницы */
-  /* padding наследуется от .content (32px) */
+  flex: 1;
 }
 
 /* На очень широких экранах контейнер не растягивается —
    серые поля появляются сами за счёт margin: auto */
-@media (min-width: 1700px) {
+@media (min-width: 1440px) {
   .dashboard-container {
     /* Можно добавить чуть больше внутренних отступов на больших экранах */
     padding: 36px 48px;
