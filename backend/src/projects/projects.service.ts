@@ -8,7 +8,7 @@ import { OneCService } from '../integrations/oneC/onec.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 
 type UploadFile = {
   originalname: string;

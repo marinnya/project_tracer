@@ -14,7 +14,8 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
-import { Express, Response } from 'express';
+import { Express } from 'express';
+import type { Response } from 'express';
 import { ProjectsService } from './projects.service';
 import { Logger } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt.guard';
