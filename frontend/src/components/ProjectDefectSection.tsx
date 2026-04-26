@@ -17,6 +17,7 @@ type SavedPhoto = {
   id: number;
   originalName: string;
   order: number;
+  yandexPath: string | null; // если заполнен — фото уже на Яндекс.Диске, крестик не показываем
 };
 
 type SavedDefect = {
@@ -117,20 +118,27 @@ function ProjectDefectSection({
         const savedPhotos = savedDef?.photos ?? [];
 
         const allFiles = [
-          ...savedPhotos.map(p => ({ id: p.id, name: p.originalName, isSaved: true as const })),
-          ...defect.files.map(f => ({ id: undefined as number | undefined, name: f.name, isSaved: false as const })),
+          ...savedPhotos.map(p => ({
+            id: p.id,
+            name: p.originalName,
+            isSaved: true as const,
+            onYandex: !!p.yandexPath,
+          })),
+          ...defect.files.map(f => ({
+            id: undefined as number | undefined,
+            name: f.name,
+            isSaved: false as const,
+            onYandex: false,
+          })),
         ];
 
         const isExpanded = expandedMap[defect.id] ?? false;
 
         return (
           <div key={defect.id} className="defect-card">
-
-            {/* номер, поля и кнопка удаления — всё в одну строку */}
             <div className="defect-row">
               <span className="defect-number">№{index + 1}</span>
 
-              {/* Тип дефекта */}
               <div className="section-row-defect">
                 <label>Тип дефекта*</label>
                 <select
@@ -150,7 +158,6 @@ function ProjectDefectSection({
                 </select>
               </div>
 
-              {/* Количество страниц */}
               <div className="section-row-defect">
                 <label>Количество страниц*</label>
                 <select
@@ -163,7 +170,6 @@ function ProjectDefectSection({
                 </select>
               </div>
 
-              {/* Загрузка файлов */}
               <input
                 id={`defect-upload-${defect.id}`}
                 type="file"
@@ -182,31 +188,32 @@ function ProjectDefectSection({
                 <span>Выберите файлы (до 10 Мб)</span>
               </label>
 
-              {/* кнопка удаления в конце строки */}
               {defects.length > 1 && (
                 <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
               )}
             </div>
 
-            {/* список файлов — на отдельной строке под остальными элементами */}
             {allFiles.length > 0 && (
               <ul className="file-list">
                 {isExpanded && allFiles.map((item, i) => (
                   <li key={`${item.name}-${i}`} className="file-item">
                     <span className="file-name">{item.name}</span>
-                    <button
-                      className="file-remove"
-                      onClick={() => {
-                        if (item.isSaved) {
-                          onRemoveSavedPhoto(item.id!);
-                        } else {
-                          removeNewFile(defect.id, item.name);
-                        }
-                      }}
-                      title="Удалить файл"
-                    >
-                      ✕
-                    </button>
+                    {/* крестик скрыт если фото уже загружено на Яндекс.Диск */}
+                    {!item.onYandex && (
+                      <button
+                        className="file-remove"
+                        onClick={() => {
+                          if (item.isSaved) {
+                            onRemoveSavedPhoto(item.id!);
+                          } else {
+                            removeNewFile(defect.id, item.name);
+                          }
+                        }}
+                        title="Удалить файл"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </li>
                 ))}
 

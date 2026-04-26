@@ -3,6 +3,7 @@ import { useRef, useState, useMemo } from "react";
 type SavedPhoto = {
   id: number;
   originalName: string;
+  yandexPath: string | null; // если заполнен — фото уже на Яндекс.Диске, крестик не показываем
 };
 
 type Props = {
@@ -42,7 +43,6 @@ function ProjectSection({
       const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
       const base = name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : name;
 
-      // если имя уже занято — добавляем (1), (2) и т.д.
       if (existing.includes(name)) {
         let counter = 1;
         while (existing.includes(`${base} (${counter})${ext}`)) {
@@ -58,17 +58,18 @@ function ProjectSection({
     onFilesChange(result);
   };
 
-  // объединяем сохранённые и новые файлы для отображения
   const allFiles = useMemo(() => [
     ...savedPhotos.map(p => ({
       id: p.id,
       name: p.originalName,
       isSaved: true as const,
+      onYandex: !!p.yandexPath,
     })),
     ...files.map(f => ({
       id: undefined,
       name: f.name,
       isSaved: false as const,
+      onYandex: false,
     })),
   ], [savedPhotos, files]);
 
@@ -111,25 +112,27 @@ function ProjectSection({
         <span className="mobile-only">Выберите файлы (до 10 Мб)</span>
       </div>
 
-      {/* список файлов — скрыт по умолчанию */}
       {allFiles.length > 0 && (
         <ul className="file-list">
           {expanded && allFiles.map((item, index) => (
             <li key={`${item.name}-${index}`} className="file-item">
               <span className="file-name">{item.name}</span>
-              <button
-                className="file-remove"
-                onClick={() => {
-                  if (item.isSaved) {
-                    onRemoveSaved(item.id!);
-                  } else {
-                    removeNewFile(item.name);
-                  }
-                }}
-                title="Удалить файл"
-              >
-                ✕
-              </button>
+              {/* крестик скрыт если фото уже загружено на Яндекс.Диск */}
+              {!item.onYandex && (
+                <button
+                  className="file-remove"
+                  onClick={() => {
+                    if (item.isSaved) {
+                      onRemoveSaved(item.id!);
+                    } else {
+                      removeNewFile(item.name);
+                    }
+                  }}
+                  title="Удалить файл"
+                >
+                  ✕
+                </button>
+              )}
             </li>
           ))}
 

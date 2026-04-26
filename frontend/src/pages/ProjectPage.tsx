@@ -36,6 +36,7 @@ type SavedPhoto = {
   defectId: number | null;
   originalName: string;
   order: number;
+  yandexPath: string | null; // если заполнен — фото уже на Яндекс.Диске
 };
 
 type Defect = {
@@ -95,7 +96,6 @@ function ProjectPage({ onLogout }: Props) {
   useEffect(() => {
     if (!id) return;
 
-    // загружаем проект
     api.get(`/projects/${id}`)
       .then(res => {
         setProject(res.data);
@@ -104,17 +104,14 @@ function ProjectPage({ onLogout }: Props) {
       })
       .catch(() => setProject(null));
 
-    // загружаем фото секций
     api.get(`/projects/${id}/photos`)
       .then(res => setSavedPhotos(res.data))
       .catch(() => setSavedPhotos([]));
 
-    // загружаем черновик — восстанавливаем количество страниц секций
     api.get(`/projects/${id}/draft`)
       .then(res => {
         const draft = res.data as Record<string, { pages: number }> | null;
         if (!draft) return;
-
         setSections(prev =>
           Object.fromEntries(
             SECTIONS.map(title => [
@@ -124,14 +121,12 @@ function ProjectPage({ onLogout }: Props) {
           )
         );
       })
-      .catch(() => {}); // черновика может не быть — это нормально
+      .catch(() => {});
 
-    // загружаем дефекты с их фото
     api.get(`/projects/${id}/defects`)
       .then(res => {
         const loaded: SavedDefect[] = res.data;
         setSavedDefects(loaded);
-
         if (loaded.length > 0) {
           setDefects(loaded.map(d => ({
             id: d.id,
@@ -178,13 +173,10 @@ function ProjectPage({ onLogout }: Props) {
     })));
   };
 
-  // строим уникальный clientKey для файла: "originalName|||globalIndex"
-  // это позволяет различать файлы с одинаковыми именами в разных секциях и внутри одной секции
   const buildClientKey = (fileName: string, globalIndex: number): string => {
     return `${fileName}|||${globalIndex}`;
   };
 
-  // принимает уже готовый список fileKeys чтобы clientKey точно совпадал с тем что в formData
   const buildSectionPhotosMeta = (
     fileKeys: string[],
     sectionFileStartIndex: number,
@@ -197,10 +189,8 @@ function ProjectPage({ onLogout }: Props) {
         .filter(p => p.section === title)
         .sort((a, b) => a.order - b.order);
 
-      // уже сохранённые фото — clientKey пустой (storedName берётся из БД по filename)
       saved.forEach(p => meta.push({ section: title, originalName: p.originalName, clientKey: '', order: p.order }));
 
-      // новые файлы — clientKey берём из готового списка fileKeys
       sections[title].files.forEach((file, i) => {
         meta.push({ section: title, originalName: file.name, clientKey: fileKeys[keyIndex++], order: saved.length + i + 1 });
       });
@@ -248,15 +238,10 @@ function ProjectPage({ onLogout }: Props) {
       );
       formData.append("sections", JSON.stringify(sectionsState));
 
-      // маппинг clientKey → секция
-      // clientKey = "originalName|||globalIndex" — уникален даже для файлов с одинаковыми именами
       const fileToSection: Record<string, string> = {};
-      // fileKeys — список clientKey в том же порядке что и файлы в formData
-      // бэкенд сопоставляет files[i] ↔ fileKeys[i] по индексу
       const fileKeys: string[] = [];
       let globalIndex = 0;
 
-      // добавляем файлы секций — поле "files" (multer ждёт это имя поля)
       for (const title of SECTIONS) {
         sections[title].files.forEach(file => {
           const clientKey = buildClientKey(file.name, globalIndex++);
@@ -266,10 +251,8 @@ function ProjectPage({ onLogout }: Props) {
         });
       }
 
-      // запоминаем сколько файлов секций добавили — для дефектов
       const sectionFilesCount = fileKeys.length;
 
-      // добавляем файлы дефектов
       for (const d of defects) {
         d.files.forEach(file => {
           const clientKey = buildClientKey(file.name, globalIndex++);
@@ -279,14 +262,10 @@ function ProjectPage({ onLogout }: Props) {
         });
       }
 
-      // передаём маппинги на бэкенд
       formData.append("fileToSection", JSON.stringify(fileToSection));
-      // fileKeys передаём отдельно — бэкенд сопоставляет по индексу с массивом files
       formData.append("fileKeys", JSON.stringify(fileKeys));
-      // передаём метаданные фото с clientKey для сопоставления с storedName
       formData.append("sectionPhotos", JSON.stringify(buildSectionPhotosMeta(fileKeys, 0)));
 
-      // для дефектов clientKey берём из fileKeys начиная с sectionFilesCount
       let defectKeyIndex = sectionFilesCount;
       const defectsData = defects.map(d => {
         const savedDef = savedDefects.find(sd => sd.id === d.id);
@@ -334,17 +313,14 @@ function ProjectPage({ onLogout }: Props) {
     }
   };
 
-
   const handleFinalSubmit = async () => {
     setError(null);
 
-    // Проверка заполнения даты окончания
     if (!endDate) {
       setError("Укажите дату окончания перед записью");
       return;
     }
 
-    // валидация...
     for (const title of SECTIONS) {
       const s = sections[title];
       const savedCount = savedPhotos.filter(p => p.section === title).length;
@@ -370,13 +346,10 @@ function ProjectPage({ onLogout }: Props) {
       setIsUploading(true);
       setUploadProgress(0);
 
-      // строим метаданные ДО сохранения — пока файлы ещё не очищены
       const uploadMeta = buildAllPhotosForUpload();
 
-      // сохраняем файлы на сервер
       await handleSave();
 
-      // передаём метаданные которые построили ДО очистки файлов
       await api.post(
         `/projects/${id}/upload`,
         {
@@ -430,7 +403,8 @@ function ProjectPage({ onLogout }: Props) {
                 <label>Дата начала</label>
                 <input
                   type="date"
-                  value={startDate} disabled
+                  value={startDate}
+                  disabled
                   onChange={e => { setStartDate(e.target.value); handleDatesUpdate(e.target.value, endDate); }}
                 />
               </div>
