@@ -6,7 +6,7 @@ body {
 
 .dashboard {
     min-height: 100vh;
-    background: #f5f5f5;
+    background: #ffffff;
 }
 
 .topbar{
@@ -632,42 +632,11 @@ body {
 
 
 /* =============================================
-   Серый фон + белый контейнер (как на ProjectPage)
+   Ограничение ширины контента на широких мониторах
    ============================================= */
-
-/* Серый фон на всю высоту под шапкой */
-.dashboard-bg {
-  background: #f5f5f5;
-  min-height: calc(100vh - 72px);
-  display: flex;
-  flex-direction: column;
-}
-
-/* Белый контейнер с ограниченной шириной по центру */
-.dashboard-container {
-  max-width: 1700px;
-  width: 100%;
-  margin: 0 auto;
-  background: #ffffff;
-  flex: 1;
-}
-
-/* На очень широких экранах контейнер не растягивается —
-   серые поля появляются сами за счёт margin: auto */
-@media (min-width: 1440px) {
-  .dashboard-container {
-    /* Можно добавить чуть больше внутренних отступов на больших экранах */
-    padding: 36px 48px;
-  }
-}
-
-/* На мобильных убираем лишние отступы */
-@media (max-width: 768px) {
-  .dashboard-bg {
-    background: #ffffff; /* на мобильных серый фон не нужен */
-  }
-
-  .dashboard-container {
-    padding: 16px;
+@media (min-width: 1600px) {
+  .content {
+    max-width: 1500px;
+    margin: 0 auto;
   }
 }

@@ -169,8 +169,7 @@ export default function EmployeesPage({ onLogout }: Props) {
       {/* пробрасываем onLogout в Header */}
       <Header onLogout={onLogout} />
 
-      <div className="dashboard-bg">
-        <main className="dashboard-container content">
+      <main className="content">
           <div className="content-header">
             <div className="header-title">
               <h1>Сотрудники</h1>
@@ -307,7 +306,6 @@ export default function EmployeesPage({ onLogout }: Props) {
             <DeleteModal employee={selectedEmployee} onClose={() => setShowModalDelete(false)} onDelete={deleteEmployee} />
           )}
         </main>
-      </div>
     </div>
   );
 }
