@@ -10,10 +10,11 @@ import {
   ParseIntPipe,
   UseGuards,
   Req,
+  Res,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
-import { Express } from 'express';
+import { Express, Response } from 'express';
 import { ProjectsService } from './projects.service';
 import { Logger } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt.guard';
@@ -28,6 +29,26 @@ export class ProjectsController {
   private readonly logger = new Logger(ProjectsController.name);
 
   constructor(private readonly projectService: ProjectsService) {}
+
+  // SSE-эндпоинт: фронт подключается перед запуском upload,
+  // бэкенд шлёт события { percent, done } по мере загрузки батчей на Яндекс.Диск
+  @Get(':id/upload-progress')
+  uploadProgress(
+    @Param('id', ParseIntPipe) projectId: number,
+    @Res() res: Response,
+  ) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    this.projectService.registerSseClient(projectId, res);
+
+    // если клиент отключился — убираем его
+    res.on('close', () => {
+      this.projectService.removeSseClient(projectId);
+    });
+  }
 
   @Get(':id/photos')
   async getPhotos(@Param('id', ParseIntPipe) projectId: number) {
@@ -167,14 +188,10 @@ export class ProjectsController {
       const savedPhotos = await this.projectService.getProjectPhotos(projectId);
       const savedDefects = await this.projectService.getDefects(projectId);
 
-      // плоский список фото дефектов с typeName и id записи — для обновления yandexPath после загрузки
       const defectPhotosFlat = savedDefects.flatMap(d =>
         d.photos.map(p => ({ ...p, typeName: d.typeName }))
       );
 
-      // добавляем yandexPath и storedName к каждому фото
-      // для дефектов: ищем по typeName + originalName + order
-      // для секций: ищем по section + originalName + order
       const photosWithMeta = photos.map(p => {
         let match: { id: number; yandexPath: string | null; filename: string | null } | undefined;
 
@@ -205,23 +222,22 @@ export class ProjectsController {
       const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
 
       this.logger.log(`Всего фото в запросе: ${photos.length}`);
-      this.logger.log(`Фото: ${JSON.stringify(photos.map(p => ({
-        name: p.originalName,
-        section: p.section,
-        defectTypeName: p.defectTypeName,
-        hasYandex: !!photosWithMeta.find(pm => pm.originalName === p.originalName && pm.section === p.section && pm.order === p.order)?.yandexPath,
-      })))}`);
 
       const files = await this.projectService.readTempFiles(tmpDir, photosWithMeta);
       this.logger.log(`Файлов для загрузки: ${files.length}`);
 
+      // шлём прогресс через SSE после каждого батча
       const { folderUrl, renamedPhotos } = await this.projectService.uploadToYandex(
         files,
         body.projectName,
         photosWithMeta,
+        (uploaded, total) => {
+          // 10–95%: загрузка файлов на Яндекс батчами
+          const percent = total === 0 ? 95 : Math.round(10 + (uploaded / total) * 85);
+          this.projectService.sendProgress(projectId, Math.min(percent, 95));
+        },
       );
 
-      // ищем переименованное имя по originalName + section + defectTypeName + order
       const findRenamed = (p: typeof photos[0]) =>
         renamedPhotos.find(r =>
           r.originalName === p.originalName &&
@@ -230,7 +246,6 @@ export class ProjectsController {
           r.order === p.order
         );
 
-      // сохраняем секционные фото (пересоздаём)
       const sectionPhotosWithPath = photos
         .filter(p => p.section !== 'дефекты')
         .map(p => {
@@ -248,7 +263,6 @@ export class ProjectsController {
 
       await this.projectService.savePhotos(projectId, sectionPhotosWithPath);
 
-      // обновляем yandexPath для фото дефектов по id записи в БД
       const defectPhotoUpdates = photos
         .filter(p => p.section === 'дефекты')
         .flatMap(p => {
@@ -275,10 +289,15 @@ export class ProjectsController {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
 
+      // 100% — всё готово
+      this.projectService.sendProgress(projectId, 100, true);
+
       return { message: 'Файлы загружены', folderUrl };
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       this.logger.error(message);
+      // шлём ошибку через SSE чтобы фронт мог её поймать
+      this.projectService.sendProgress(projectId, -1, true);
       throw e;
     }
   }

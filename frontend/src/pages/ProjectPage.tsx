@@ -75,11 +75,12 @@ function ProjectPage({ onLogout }: Props) {
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadLabel, setUploadLabel] = useState("Сохранение...");
   const navigate = useNavigate();
 
   const { id } = useParams();
   const [project, setProject] = useState<Project | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // пока грузится проект
+  const [isLoading, setIsLoading] = useState(true);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -98,7 +99,6 @@ function ProjectPage({ onLogout }: Props) {
   useEffect(() => {
     if (!id) return;
 
-    // грузим все данные параллельно, ждём хотя бы проект
     const projectReq = api.get(`/projects/${id}`)
       .then(res => {
         setProject(res.data);
@@ -142,19 +142,16 @@ function ProjectPage({ onLogout }: Props) {
       })
       .catch(() => setSavedDefects([]));
 
-    // снимаем спиннер когда все запросы завершены
     Promise.all([projectReq, photosReq, draftReq, defectsReq])
       .finally(() => setIsLoading(false));
   }, [id]);
 
-  // показываем спиннер пока грузятся данные
   if (isLoading) return (
     <div className="spinner-fullscreen">
       <div className="spinner" />
     </div>
   );
 
-  // проект не найден (загрузка завершена, но данных нет)
   if (!project) return (
     <div className="spinner-fullscreen">
       <p style={{ color: "#999", fontSize: 15 }}>Проект не найден</p>
@@ -364,29 +361,66 @@ function ProjectPage({ onLogout }: Props) {
     try {
       setIsUploading(true);
       setUploadProgress(0);
+      setUploadLabel("Сохранение...");
 
       const uploadMeta = buildAllPhotosForUpload();
 
+      // Фаза 1: сохранение черновика (0→10%)
+      // таймер даёт визуальное движение пока идёт handleSave
+      const saveTimer = setInterval(() => {
+        setUploadProgress(prev => (prev < 9 ? prev + 1 : prev));
+      }, 200);
       await handleSave();
+      clearInterval(saveTimer);
+      setUploadProgress(10);
+      setUploadLabel("Загрузка на Яндекс.Диск...");
 
-      await api.post(
-        `/projects/${id}/upload`,
-        {
-          projectName: project.name,
-          photos: JSON.stringify(uploadMeta),
-        },
-        {
-          onUploadProgress: (progressEvent) => {
-            const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total ?? 1));
-            setUploadProgress(Math.min(percent, 70));
-          },
-        }
-      );
+      // Фаза 2: реальный прогресс загрузки на Яндекс через SSE (10→100%)
+      await new Promise<void>((resolve, reject) => {
+        const baseUrl = (import.meta as { env: Record<string, string> }).env.VITE_API_URL ?? "";
+        const token = localStorage.getItem("token") ?? "";
+        const sse = new EventSource(
+          `${baseUrl}/projects/${id}/upload-progress?token=${token}`
+        );
 
-      setUploadProgress(100);
+        sse.onmessage = (event) => {
+          const data = JSON.parse(event.data) as { percent: number; done: boolean };
+
+          if (data.percent === -1) {
+            sse.close();
+            reject(new Error("Ошибка загрузки — проверьте консоль бэкенда"));
+            return;
+          }
+
+          setUploadProgress(data.percent);
+
+          if (data.done) {
+            sse.close();
+            resolve();
+          }
+        };
+
+        sse.onerror = () => {
+          sse.close();
+          reject(new Error("Ошибка соединения с сервером"));
+        };
+
+        // небольшая задержка чтобы SSE успело зарегистрироваться на бэкенде
+        // до того как придёт первый прогресс
+        setTimeout(() => {
+          api.post(
+            `/projects/${id}/upload`,
+            {
+              projectName: project.name,
+              photos: JSON.stringify(uploadMeta),
+            },
+          ).catch(reject);
+        }, 300);
+      });
+
       setShowModal(true);
-    } catch {
-      setError("Ошибка загрузки — проверьте консоль бэкенда");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Ошибка загрузки");
     } finally {
       setIsUploading(false);
     }
@@ -465,7 +499,7 @@ function ProjectPage({ onLogout }: Props) {
 
           {isUploading && (
             <div className="progress-wrapper">
-              <p className="progress-label">Загрузка на Яндекс.Диск... {uploadProgress}%</p>
+              <p className="progress-label">{uploadLabel} {uploadProgress}%</p>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
               </div>

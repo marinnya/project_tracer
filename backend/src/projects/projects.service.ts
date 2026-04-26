@@ -8,6 +8,7 @@ import { OneCService } from '../integrations/oneC/onec.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from '@nestjs/common';
+import { Response } from 'express';
 
 type UploadFile = {
   originalname: string;
@@ -25,6 +26,9 @@ export class ProjectsService {
   private readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk/resources';
   private readonly BATCH_SIZE = 10;
 
+  // хранилище SSE-клиентов: projectId → Response
+  private readonly sseClients = new Map<number, Response>();
+
   private readonly sectionKeyMap: Record<string, string> = {
     'Титульный лист': 'титульный',
     'Технические данные объекта контроля': 'техданные',
@@ -40,6 +44,28 @@ export class ProjectsService {
     private readonly prisma: PrismaService,
     private readonly oneCService: OneCService,
   ) {}
+
+  // регистрируем SSE-клиента для проекта
+  registerSseClient(projectId: number, res: Response) {
+    this.sseClients.set(projectId, res);
+  }
+
+  // удаляем SSE-клиента
+  removeSseClient(projectId: number) {
+    this.sseClients.delete(projectId);
+  }
+
+  // шлём прогресс SSE-клиенту
+  sendProgress(projectId: number, percent: number, done = false) {
+    const client = this.sseClients.get(projectId);
+    if (!client) return;
+    const data = JSON.stringify({ percent, done });
+    client.write(`data: ${data}\n\n`);
+    if (done) {
+      client.end();
+      this.sseClients.delete(projectId);
+    }
+  }
 
   private getHeaders() {
     return { Authorization: `OAuth ${process.env.YANDEX_TOKEN}` };
@@ -171,10 +197,6 @@ export class ProjectsService {
     });
   }
 
-  // читаем только НОВЫЕ файлы — те у которых нет yandexPath.
-  // если файл не найден на диске — пропускаем с предупреждением:
-  // это фото из уже загруженного проекта у которого match не сработал,
-  // оно уже есть на Яндекс.Диске и будет взято из alreadyUploaded в uploadToYandex.
   async readTempFiles(
     tmpDir: string,
     photos: {
@@ -200,7 +222,6 @@ export class ProjectsService {
       const filePath = path.join(tmpDir, subfolder, fileName);
 
       if (!fs.existsSync(filePath)) {
-        // файл не найден на диске — скорее всего уже был загружен на Яндекс.Диск ранее
         this.logger.warn(
           `Файл не найден на диске, пропускаем: ${photo.originalName} ` +
           `(storedName: ${fileName}, подпапка: ${subfolder}) — возможно уже загружен на Яндекс.Диск`
@@ -232,6 +253,8 @@ export class ProjectsService {
       order: number;
       yandexPath?: string | null;
     }[],
+    // колбэк прогресса: сколько файлов загружено из общего числа новых
+    onProgress?: (uploaded: number, total: number) => void,
   ): Promise<{
     message: string;
     folderUrl: string;
@@ -248,7 +271,6 @@ export class ProjectsService {
     const newPhotos = photos.filter(p => !p.yandexPath);
     const alreadyUploaded = photos.filter(p => p.yandexPath);
 
-    // составной ключ: originalName + section + defectTypeName + order
     const photoMap = new Map<string, { section: string | null; order: number; defectTypeName?: string }>();
     for (const photo of newPhotos) {
       const key = `${photo.originalName}|||${photo.section ?? ''}|||${photo.defectTypeName ?? ''}|||${photo.order}`;
@@ -261,7 +283,6 @@ export class ProjectsService {
 
     const renamedPhotos: { originalName: string; section: string | null; defectTypeName?: string; order: number; filename: string }[] = [];
 
-    // уже загруженные — берём имя из существующего yandexPath
     for (const p of alreadyUploaded) {
       const existingFilename = p.yandexPath!.split('/').pop() ?? p.originalName;
       renamedPhotos.push({
@@ -272,6 +293,9 @@ export class ProjectsService {
         filename: existingFilename,
       });
     }
+
+    const totalNew = files.length;
+    let uploadedCount = 0;
 
     for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
       const batch = files.slice(i, i + this.BATCH_SIZE);
@@ -304,13 +328,16 @@ export class ProjectsService {
           });
         })
       );
+
+      // после каждого батча сообщаем сколько загружено
+      uploadedCount = Math.min(i + this.BATCH_SIZE, totalNew);
+      onProgress?.(uploadedCount, totalNew);
     }
 
     const folderUrl = await this.getPublicUrl(projectName);
     return { message: 'Файлы успешно загружены', folderUrl, renamedPhotos };
   }
 
-  // сохраняет yandexPath для секционных фото (пересоздаёт записи)
   async savePhotos(
     projectId: number,
     photos: {
@@ -322,7 +349,6 @@ export class ProjectsService {
       order: number;
     }[]
   ) {
-    // пересоздаём только секционные фото (не дефекты)
     await this.prisma.projectPhoto.deleteMany({
       where: { projectId, defectId: null },
     });
@@ -332,7 +358,6 @@ export class ProjectsService {
     });
   }
 
-  // обновляет yandexPath для фото дефектов по id записи
   async saveDefectPhotoYandexPaths(
     updates: { id: number; yandexPath: string; filename: string }[]
   ) {
