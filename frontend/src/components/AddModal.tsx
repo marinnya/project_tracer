@@ -155,8 +155,7 @@ export default function AddModal({ onClose, onSave, existingOneCIds }: Props) {
           </div>
         </div>
 
-        {/* фиксированный слот под ошибку — кнопка не прыгает */}
-        <div className="modal-error-slot">{error}</div>
+        {error && <div className="modal-error-slot">{error}</div>}
 
         <button className="btn primary" onClick={handleSubmit}>
           Добавить
