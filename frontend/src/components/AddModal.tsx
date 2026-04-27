@@ -12,7 +12,7 @@ type Props = {
     role: "ADMIN" | "EMPLOYEE";
     oneCId: string;
   }) => void;
-  existingOneCIds: string[]; // добавить
+  existingOneCIds: string[];
 };
 
 type OneCEmployee = {
@@ -21,7 +21,6 @@ type OneCEmployee = {
   lastName: string;
 };
 
-// правила валидации
 const validateLogin = (login: string): string | null => {
   if (login.length < 5) return "Логин должен содержать не менее 5 символов";
   if (!/^[a-zA-Z0-9_]+$/.test(login))
@@ -29,7 +28,6 @@ const validateLogin = (login: string): string | null => {
   return null;
 };
 
-// валидация пароля — единое правило
 const validatePassword = (password: string): boolean => {
   return (
     password.length >= 8 &&
@@ -39,7 +37,6 @@ const validatePassword = (password: string): boolean => {
   );
 };
 
-// единое сообщение об ошибке пароля
 const PASSWORD_ERROR =
   "Пароль должен быть не менее 8 символов и содержать заглавную, строчную латинскую букву и цифру";
 
@@ -55,7 +52,6 @@ export default function AddModal({ onClose, onSave, existingOneCIds }: Props) {
     api
       .get("/users/onec-employees")
       .then((res) => {
-        // фильтруем тех кто уже добавлен в систему
         const filtered = res.data.filter(
           (emp: OneCEmployee) => !existingOneCIds.includes(emp.id)
         );
@@ -73,14 +69,12 @@ export default function AddModal({ onClose, onSave, existingOneCIds }: Props) {
       return;
     }
 
-    // валидация логина
     const loginError = validateLogin(login);
     if (loginError) {
       setError(loginError);
       return;
     }
 
-    // валидация пароля (единое сообщение)
     if (!validatePassword(password)) {
       setError(PASSWORD_ERROR);
       return;
@@ -161,7 +155,8 @@ export default function AddModal({ onClose, onSave, existingOneCIds }: Props) {
           </div>
         </div>
 
-        {error && <div className="error">{error}</div>}
+        {/* фиксированный слот под ошибку — кнопка не прыгает */}
+        <div className="modal-error-slot">{error}</div>
 
         <button className="btn primary" onClick={handleSubmit}>
           Добавить
