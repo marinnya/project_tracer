@@ -70,17 +70,16 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    margin: 24px 0 14px;
+    margin: 24px 0 24px;
 }
 
-/* ошибка без лишних отступов — не сдвигает кнопку */
 .modal-error-slot {
     font-size: 13px;
     color: #d64545;
     text-align: left;
     line-height: 1.4;
-    margin: 0 0 14px;
-    min-height: 0;
+    margin: 0;
+    text-align: left;
 }
 
 .form-row {

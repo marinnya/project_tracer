@@ -153,9 +153,9 @@ export default function AddModal({ onClose, onSave, existingOneCIds }: Props) {
               placeholder="Не менее 8 символов"
             />
           </div>
-        </div>
 
-        {error && <div className="modal-error-slot">{error}</div>}
+          {error && <div className="modal-error-slot">{error}</div>}
+        </div>
 
         <button className="btn primary" onClick={handleSubmit}>
           Добавить
