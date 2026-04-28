@@ -107,20 +107,6 @@ export default function Dashboard({ onLogout }: Props) {
     if (!date) return "—";
     return new Date(date).toLocaleDateString("ru-RU");
   };
-
-  // стрелка вниз = по возрастанию (asc), стрелка вверх = по убыванию (desc)
-  const SortArrow = ({ field }: { field: SortField }) => {
-    const isActive = sortField === field;
-
-    return (
-      <img
-        src="/arrow_down.png"
-        alt=""
-        className={`arrow ${sortDirection === "desc" && isActive ? "open" : ""}`}
-        style={{ marginLeft: 4 }}
-      />
-    );
-  };
     
   return (
     <div className="dashboard">
@@ -186,7 +172,13 @@ export default function Dashboard({ onLogout }: Props) {
                       className="th-sort-btn"
                       onClick={() => handleSort("name")}
                     >
-                      Наименование <SortArrow field="name" />
+                      Наименование
+                      <img
+                        src="/arrow_down.png"
+                        alt=""
+                        className={`arrow ${sortField === "name" && sortDirection === "desc" ? "open" : ""}`}
+                        style={{ marginLeft: 4, opacity: sortField === "name" ? 1 : 0.35 }}
+                      />
                     </button>
                   </th>
 
@@ -196,7 +188,13 @@ export default function Dashboard({ onLogout }: Props) {
                       className="th-sort-btn"
                       onClick={() => handleSort("startDate")}
                     >
-                      Дата начала <SortArrow field="startDate" />
+                      Дата начала
+                      <img
+                        src="/arrow_down.png"
+                        alt=""
+                        className={`arrow ${sortField === "startDate" && sortDirection === "desc" ? "open" : ""}`}
+                        style={{ marginLeft: 4, opacity: sortField === "startDate" ? 1 : 0.35 }}
+                      />
                     </button>
                   </th>
 
@@ -206,7 +204,13 @@ export default function Dashboard({ onLogout }: Props) {
                       className="th-sort-btn"
                       onClick={() => handleSort("endDate")}
                     >
-                      Дата окончания <SortArrow field="endDate" />
+                      Дата окончания
+                      <img
+                        src="/arrow_down.png"
+                        alt=""
+                        className={`arrow ${sortField === "endDate" && sortDirection === "desc" ? "open" : ""}`}
+                        style={{ marginLeft: 4, opacity: sortField === "endDate" ? 1 : 0.35 }}
+                      />
                     </button>
                   </th>
                   <th>Ответственный</th>
