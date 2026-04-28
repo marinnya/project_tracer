@@ -3,7 +3,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { Role } from '@prisma/client';
 
-// правила валидации — дублируем на бэкенде независимо от фронта
 const validateLogin = (login: string): string | null => {
   if (login.length < 5) return 'Логин должен содержать не менее 5 символов';
   if (!/^[a-zA-Z0-9_]+$/.test(login))
@@ -11,7 +10,6 @@ const validateLogin = (login: string): string | null => {
   return null;
 };
 
-// валидация пароля — единое правило
 const validatePassword = (password: string): boolean => {
   return (
     password.length >= 8 &&
@@ -21,7 +19,6 @@ const validatePassword = (password: string): boolean => {
   );
 };
 
-// единое сообщение об ошибке пароля
 const PASSWORD_ERROR =
   'Пароль должен быть не менее 8 символов и содержать заглавную, строчную латинскую букву и цифру';
 
@@ -41,9 +38,9 @@ export class UsersService {
     const loginError = validateLogin(data.login);
     if (loginError) throw new BadRequestException(loginError);
 
-    // проверяем что логин не занят
-    const existingLogin = await this.prisma.user.findUnique({
-      where: { login: data.login },
+    // проверяем что логин не занят (среди не удалённых)
+    const existingLogin = await this.prisma.user.findFirst({
+      where: { login: data.login, deletedAt: null },
     });
 
     if (existingLogin) {
@@ -59,24 +56,29 @@ export class UsersService {
     const roleEnum: Role =
       data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
 
-    // если передан oneCId — ищем существующего пользователя из 1С
+    // если передан oneCId — ищем существующего пользователя (в т.ч. удалённого)
     if (data.oneCId) {
       const existingByOneCId = await this.prisma.user.findUnique({
         where: { oneCId: data.oneCId },
       });
 
       if (existingByOneCId) {
-        // пользователь уже есть в БД (пришёл из 1С) — обновляем логин и пароль
-
-        // проверяем что логин не занят другим пользователем
-        const existingLogin = await this.prisma.user.findUnique({
-          where: { login: data.login },
+        // проверяем что логин не занят другим пользователем (среди не удалённых)
+        const loginTaken = await this.prisma.user.findFirst({
+          where: {
+            login: data.login,
+            deletedAt: null,
+            NOT: { id: existingByOneCId.id },
+          },
         });
 
-        if (existingLogin && existingLogin.id !== existingByOneCId.id) {
+        if (loginTaken) {
           throw new BadRequestException('Логин уже занят');
         }
 
+        // обновляем пользователя и сбрасываем deletedAt —
+        // это ключевое исправление: при повторном добавлении удалённого сотрудника
+        // он снова становится активным
         const user = await this.prisma.user.update({
           where: { oneCId: data.oneCId },
           data: {
@@ -85,10 +87,11 @@ export class UsersService {
             role: roleEnum,
             firstName: data.firstName,
             lastName: data.lastName,
+            deletedAt: null,       // сбрасываем мягкое удаление
+            isBlocked: false,      // на всякий случай снимаем блокировку
           },
         });
 
-        // связываем все проекты где oneCResponsibleId совпадает с его oneCId
         await this.prisma.project.updateMany({
           where: { oneCResponsibleId: user.oneCId! },
           data: { responsibleId: user.id },
@@ -110,9 +113,6 @@ export class UsersService {
       },
     });
 
-    // если у нового пользователя есть oneCId —
-    // связываем все проекты где oneCResponsibleId совпадает с его oneCId
-    // это нужно когда проект подгрузился из 1С раньше чем сотрудника добавили в приложение
     if (user.oneCId) {
       await this.prisma.project.updateMany({
         where: { oneCResponsibleId: user.oneCId },
@@ -123,13 +123,12 @@ export class UsersService {
     return user;
   }
 
-  // возвращает всех активных сотрудников (не удалённых)
   async findAllEmployees() {
     return this.prisma.user.findMany({
       where: {
         role: Role.EMPLOYEE,
         deletedAt: null,
-        NOT: { login: { startsWith: 'onec_' } }, // скрываем не добавленных админом
+        NOT: { login: { startsWith: 'onec_' } },
       },
     });
   }
@@ -149,7 +148,6 @@ export class UsersService {
     });
   }
 
-  // блокировка/разблокировка пользователя
   async blockUser(userId: string, value: boolean) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -157,7 +155,6 @@ export class UsersService {
     });
   }
 
-  // мягкое удаление — проставляем deletedAt вместо физического удаления
   async deleteUser(userId: string) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -165,7 +162,6 @@ export class UsersService {
     });
   }
 
-  // поиск по логину — используется при авторизации
   async findByLogin(login: string) {
     return this.prisma.user.findFirst({
       where: {
@@ -175,7 +171,6 @@ export class UsersService {
     });
   }
 
-  // редактирование логина или пароля
   async updateUser(userId: string, data: { login?: string; password?: string }) {
     const updateData: Partial<{ login: string; passwordHash: string }> = {};
 
@@ -183,12 +178,15 @@ export class UsersService {
       const loginError = validateLogin(data.login);
       if (loginError) throw new BadRequestException(loginError);
 
-      // проверяем что логин не занят другим пользователем
-      const existing = await this.prisma.user.findUnique({
-        where: { login: data.login },
+      const existing = await this.prisma.user.findFirst({
+        where: {
+          login: data.login,
+          deletedAt: null,
+          NOT: { id: userId },
+        },
       });
 
-      if (existing && existing.id !== userId) {
+      if (existing) {
         throw new BadRequestException('Логин уже занят');
       }
 
