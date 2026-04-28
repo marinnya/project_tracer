@@ -1,95 +1,87 @@
-body {
-  margin: 0;
-  font-family: Inter, Arial, sans-serif;
-  background: #f5f5f5;
-}
 
 .dashboard {
-    min-height: 100vh;
-    background: #ffffff;
+  min-height: 100vh;
+  background: #fff;
 }
 
-.topbar{
-    height: 72px;
-    padding: 0 32px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #eee;
+/* Шапка */
+.topbar {
+  height: 72px;
+  padding: 0 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #eee;
 }
 
-.logo{
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    cursor: pointer;
-    text-decoration: none;
-    color: inherit;
+.logo {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
 }
 
-.logo-icon{
-    font-size: 22px;
+.logo-icon img {
+  width: 28px;
+  height: 28px;
 }
 
-.logo-icon img{
-    /*width: 24px;*/
-    width: 28px;
-    height: 28px;
+.logo-title {
+  font-weight: 600;
+  font-size: 14px;
 }
 
-.logo-title{
-    font-weight: 600;
+.logo-subtitle {
+  font-size: 12px;
+  color: #777;
 }
 
-.logo-subtitle{
-    font-size: 12px;
-    color: #777;
+.user {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
-.user{
-    display: flex;
-    align-items: center;
-    gap: 16px;
+.welcome {
+  font-size: 14px;
+  color: #555;
 }
 
-.welcome{
-    font-size: 14px;
-    color: #555;
+.avatar {
+  width: 28px;
+  height: 28px;
+  background: #2aa3ff;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
 }
 
-.avatar{
-    width: 28px;
-    height: 28px;
-    background:#2aa3ff;
-    color: #fff;
-    border-radius: 50%;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    position: relative;
+.user-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  padding: 8px;
 }
 
-
-.user-menu{
-    position: absolute;
-    top: 44px;
-    right: 0;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    padding: 8px;
+.user-menu button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 14px;
 }
 
-.user-menu button{
-    border: none;
-    background: none;
-    cursor: pointer;
-    padding: 8px 12px;
-    font-size: 14px;
-}
-
+/* Мобильное меню (бургер) */
 .burger-btn {
   background: none;
   border: none;
@@ -105,11 +97,9 @@ body {
   position: absolute;
   top: 40px;
   right: 0;
-
   background: white;
   border-radius: 14px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -123,6 +113,7 @@ body {
   text-align: left;
   cursor: pointer;
   color: #777;
+  font-size: 14px;
 }
 
 .burger-menu button.active {
@@ -142,11 +133,9 @@ body {
   position: absolute;
   top: 36px;
   right: 0;
-
   background: #fff;
   border-radius: 14px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -169,6 +158,7 @@ body {
 .mobile-menu button + button {
   border-top: 1px solid #eee;
 }
+
 .mobile-user-trigger {
   display: flex;
   align-items: center;
@@ -177,37 +167,24 @@ body {
   cursor: pointer;
 }
 
+/* Стрелка сортировки */
 .arrow {
   width: 16px;
   height: 8px;
-  transition: transform 0.4s ease;
+  transition: transform 0.25s ease;
+  transform: rotate(0deg);
 }
 
 .arrow.open {
   transform: rotate(180deg);
 }
 
-
-.tabs_header {
-    margin-left: auto;
-    display: flex;
-    gap: 10px;
-    margin-right: 60px;
-}
-
-.tab {
-  background: none;
-  border: none;
-  font-size: 16px;
-  cursor: pointer;
-  padding: 6px 12px;
-}
-
+/* Навигационное меню в шапке */
 .menu {
-    display: flex;
-    gap: 22px;
-    margin-left: auto;
-    margin-right: 60px;
+  display: flex;
+  gap: 22px;
+  margin-left: auto;
+  margin-right: 60px;
 }
 
 .menu .tab {
@@ -228,66 +205,62 @@ body {
   content: "";
   position: absolute;
   left: 0;
-  bottom: -4px; /* подчеркивание чуть ниже текста */
+  bottom: -4px;
   height: 2.5px;
   width: 100%;
   background: #2aa3ff;
 }
 
-
-
-.content{
-    padding: 32px;
+/* Основной контент */
+.content {
+  padding: 32px;
 }
 
-.content-header{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
 }
 
-.content-header h1{
-    font-size: 24px;
-    font-weight: 600;
+.content-header h1 {
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .header-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.mobile-only {
-    display: none;
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
 }
 
-.desktop-only {
-    display: inline-flex;
-}
-
-
+/* Кнопка добавить */
 .add-btn {
-    background: white;
-    color: #777;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border: none;
-
-    height: 40px;
-    min-width: 200px;
-    border-radius: 14px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: 0.2s;
+  background: white;
+  color: #777;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  height: 40px;
+  min-width: 200px;
+  border-radius: 14px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: 0.2s;
 }
 
 .add-btn img {
-    width: 25px;
-    height: 25px;
+  width: 25px;
+  height: 25px;
 }
-
 
 .add-icon-btn {
   background: none;
@@ -301,65 +274,64 @@ body {
   height: 26px;
 }
 
-
-.filters button{
-    border: none;
-    background: none;
-    margin-left: 16px;
-    font-size: 14px;
-    cursor: pointer;
-    color: #777;
-    position: relative;
+/* Фильтры */
+.filters button {
+  border: none;
+  background: none;
+  margin-left: 16px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #777;
+  position: relative;
 }
 
-.filters .active{
-    color: #000;
+.filters .active {
+  color: #000;
 }
 
-.filters .active::after{
-    content: "";
-    position: absolute;
-    left: 0;
-    bottom: -6px;
-    height: 2.5px;
-    width: 100%;
-    background: #2aa3ff;
+.filters .active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  height: 2.5px;
+  width: 100%;
+  background: #2aa3ff;
 }
 
 .filter-icon-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 .filter-icon-btn img {
-    width: 22px;
-    height: 22px;
+  width: 22px;
+  height: 22px;
 }
 
 .filter-dropdown {
-    position: absolute;
-    top: 40px;
-    right: 0;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-    display: flex;
-    flex-direction: column;
-    min-width: 120px;
-    overflow: hidden;
-    border: 1px solid #dfdfdf;
+  position: absolute;
+  top: 40px;
+  right: 0;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  overflow: hidden;
+  border: 1px solid #dfdfdf;
 }
 
-.filter-dropdown button{
-    background: none;
-    border: none;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-    padding: 8px 16px;
-    text-align: left;
-    cursor: pointer;
-    color: #777;
-    background: #fff;
+.filter-dropdown button {
+  background: #fff;
+  border: none;
+  padding: 8px 16px;
+  text-align: left;
+  cursor: pointer;
+  color: #777;
+  font-size: 14px;
 }
 
 .filter-dropdown button.active {
@@ -370,54 +342,76 @@ body {
   border-top: 1px solid #eee;
 }
 
-.projects-table{
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
+/* Таблица проектов / сотрудников */
+.projects-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
 }
 
-.projects-table thead{
-    background: #f3f3f3;
+.projects-table thead {
+  background: #f3f3f3;
 }
 
 .projects-table th,
 .projects-table td {
-    padding: 14px 12px;
-    text-align: left;
+  padding: 14px 12px;
+  text-align: left;
 }
 
 .projects-table tbody tr {
-    border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #eee;
 }
 
 .projects-table .name {
-    font-weight: 500;
+  font-weight: 500;
 }
 
-.status{
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 12px;
+/* Кнопка сортировки в заголовке */
+.th-sort-btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
 }
 
-.status.in-progress{
-    background: #e8f4ff;
-    color: #2aa3ff;
+/* Статусы */
+.status {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-.status.done{
-    background: #eee;
-    color: #777;
+.status.in-progress {
+  background: #e8f4ff;
+  color: #2aa3ff;
 }
 
-.clickable{
-    cursor: pointer;
+.status.done {
+  background: #eee;
+  color: #777;
 }
 
-.clickable:hover{
-    background: #fafafa;
+.status.edit {
+  background: #e9f8ef;
+  color: #2e9b5f;
+  cursor: pointer;
 }
 
+.status.block {
+  background: #eee;
+  color: #777;
+  cursor: pointer;
+}
+
+.status.delete {
+  background: #fdeaea;
+  color: #d64545;
+  cursor: pointer;
+}
 
 .status-actions {
   display: flex;
@@ -425,28 +419,15 @@ body {
   align-items: center;
 }
 
-/* редактировать — зелёный */
-.status.edit {
-  background: #e9f8ef;
-  color: #2e9b5f;
+.clickable {
   cursor: pointer;
 }
 
-/* блокировать — серый */
-.status.block {
-  background: #eee;
-  color: #777;
-  cursor: pointer;
+.clickable:hover {
+  background: #fafafa;
 }
 
-/* удалить — красный */
-.status.delete {
-  background: #fdeaea;
-  color: #d64545;
-  cursor: pointer;
-}
-
-
+/* Мобильные карточки проектов */
 .projects-mobile {
   display: none;
 }
@@ -482,61 +463,22 @@ body {
   margin-top: 5px;
 }
 
-/*стрелка сортировки*/
-.th-sort-btn {
-  all: unset;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sort-arrow {
-  width: 12px;
-  opacity: 0.4;
-  transition: transform 0.2s ease, opacity 0.2s ease;
-  pointer-events: none;
-}
-
-.sort-arrow.active {
-  opacity: 1;
-}
-
-.sort-arrow.desc {
-  transform: rotate(180deg);
-}
-
-.arrow {
-  transition: transform 0.25s ease;
-  transform: rotate(0deg);
-}
-
-.arrow.open {
-  transform: rotate(180deg);
-}
-
-
-/* === адаптация === */
-@media (max-width: 768px) {
-  .projects-desktop {
-    display: none;
-  }
-
-  .projects-mobile {
-    display: block;
-  }
-}
-
 .project-responsible {
   margin-top: 2px;
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #888888;
+  color: #888;
 }
 
+.project-responsible img {
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+}
 
+/* Мобильные карточки сотрудников */
 .employees-mobile {
   display: none;
 }
@@ -555,13 +497,8 @@ body {
 }
 
 .employee-credentials {
-    display: flex;
-    gap: 8px;
-    font-size: 12px;
-    color: #888;
-}
-
-.employee-login {
+  display: flex;
+  gap: 8px;
   font-size: 12px;
   color: #888;
   margin-top: 2px;
@@ -573,39 +510,29 @@ body {
 }
 
 .employee-actions img {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   cursor: pointer;
 }
 
-@media (max-width: 768px) {
-  .projects-desktop {
-    display: none;
+/* Видимость по размеру экрана */
+.mobile-only {
+  display: none;
+}
+
+.desktop-only {
+  display: inline-flex;
+}
+
+/* Ограничение ширины на широких мониторах */
+@media (min-width: 1600px) {
+  .content {
+    max-width: 1500px;
+    margin: 0 auto;
   }
-
-  .employees-mobile {
-    display: block;
-  }
 }
 
-
-.project-responsible img {
-  width: 14px;
-  height: 14px;
-  opacity: 0.6;
-}
-
-
-.header-actions {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 24px;
-}
-
-
-/*кнопка добавить сотрудника*/
-
+/* Адаптация 768px */
 @media (max-width: 768px) {
   .mobile-only {
     display: inline-flex;
@@ -614,29 +541,24 @@ body {
   .desktop-only {
     display: none;
   }
-}
 
-
-/*header*/
-@media (max-width: 768px) {
   .logo-text {
     display: none;
   }
-}
 
-@media (max-width: 768px) {
   .content-header {
     margin-bottom: 5px;
   }
-}
 
+  .projects-desktop {
+    display: none;
+  }
 
-/* =============================================
-   Ограничение ширины контента на широких мониторах
-   ============================================= */
-@media (min-width: 1600px) {
-  .content {
-    max-width: 1500px;
-    margin: 0 auto;
+  .projects-mobile {
+    display: block;
+  }
+
+  .employees-mobile {
+    display: block;
   }
 }

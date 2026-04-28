@@ -1,11 +1,6 @@
-body {
-  margin: 0;
-  font-family: Inter, Arial, sans-serif;
-  background: #f5f5f5;
-}
 
 .page {
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -17,18 +12,17 @@ body {
 }
 
 .info-row {
-    display: grid;
-    grid-template-columns: 18px auto;
-    column-gap: 10px;
-    row-gap: 2px;
-    align-items: center;
+  display: grid;
+  grid-template-columns: 18px auto;
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: center;
 }
 
 .info-icon {
-  grid-row: 1 / span 2; /* иконка занимает 2 строки */
+  grid-row: 1 / span 2;
   width: 18px;
   height: 18px;
-  /*opacity: 0.7;*/
 }
 
 .info-title {
@@ -38,26 +32,28 @@ body {
 }
 
 .info-subtitle {
-  grid-column: 1 / span 2; /* начинается от самой левой линии */
+  grid-column: 1 / span 2;
   font-size: 12px;
   color: #888;
 }
 
+/* Карточка формы */
 .card {
-margin-top: 50px;
-background: white;
-padding: 32px 60px 32px 60px;
-border-radius: 16px;
-width: 270px;
-box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  margin-top: 50px;
+  background: white;
+  padding: 32px 60px;
+  border-radius: 16px;
+  width: 270px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
 }
 
-.card h2{
+.card h2 {
   font-size: 22px;
   font-weight: 600;
+  margin: 0 0 20px;
 }
 
-
+/* Переключатель ролей */
 .tabs {
   display: flex;
   gap: 45px;
@@ -65,18 +61,17 @@ box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
 }
 
 .tabs button {
-  /*flex: 1;*/
-  padding: 8px 0px;
+  padding: 8px 0;
   border: none;
   background: transparent;
   cursor: pointer;
   color: #777;
-  text-align: left;
-  position: relative; /* нужно для ::after */
+  font-size: 14px;
+  position: relative;
 }
 
 .tabs .active {
-  color: #000000;
+  color: #000;
 }
 
 .tabs .active::after {
@@ -85,18 +80,11 @@ box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
   bottom: 0;
   left: 0;
   height: 2px;
-  width: 100%; 
-  background-color: #2aa3ff;
-
-  /* ширина линии чуть больше текста */
-  /*width: 70%;*/
-  /*max-width: calc(100% + 0px);  добавляем 8px к длине текста */
-  
-  /*background-color: #2aa3ff;*/
-  /*transform: translateX(-4px);  сдвигаем, чтобы линия была по центру текста */
+  width: 100%;
+  background: #2aa3ff;
 }
 
-
+/* Поля ввода */
 input {
   width: 100%;
   padding: 10px;
@@ -104,9 +92,10 @@ input {
   border-radius: 6px;
   border: 1px solid #ccc;
   box-sizing: border-box;
+  font-size: 14px;
 }
 
-
+/* Кнопки */
 .primary {
   width: 100%;
   padding: 10px;
@@ -116,20 +105,21 @@ input {
   border-radius: 6px;
   cursor: pointer;
   height: 37px;
+  font-size: 14px;
 }
 
 .back {
   width: 100%;
   padding: 10px;
-  background: #ffffff;
+  background: #fff;
   color: #2aa3ff;
   border: 1px solid #2aa3ff;
   border-radius: 6px;
   cursor: pointer;
   height: 37px;
   margin-top: 10px;
+  font-size: 14px;
 }
-
 
 .link {
   margin-top: 10px;
@@ -140,18 +130,18 @@ input {
   font-size: 13px;
 }
 
+/* Ошибка */
 .error {
-  color: red;
+  color: #d64545;
   margin-bottom: 10px;
   font-size: 13px;
 }
 
-
 p {
-    font-size: 13px;
+  font-size: 13px;
 }
 
-
+/* Карточка восстановления пароля */
 .page_recovery {
   min-height: 100vh;
   display: flex;
@@ -165,31 +155,26 @@ p {
   border-radius: 16px;
   width: 280px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-
-  transform: translateY(-50px); /* ← смещение вверх */
+  transform: translateY(-50px);
 }
 
-.card_recovery h2{
+.card_recovery h2 {
   font-size: 22px;
   font-weight: 600;
 }
 
-
-/* Адаптация под мобильные */
+/* Адаптация */
 @media (max-width: 480px) {
   .card {
     width: 70%;
     max-width: 320px;
     padding: 30px 36px;
     margin-top: 30px;
-}
+  }
 
-.card_recovery {
-    background: white;
+  .card_recovery {
     padding: 30px 30px;
-    border-radius: 16px;
     width: 280px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
     transform: translateY(-50px);
-}
+  }
 }
