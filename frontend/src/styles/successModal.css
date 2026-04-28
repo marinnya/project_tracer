@@ -112,6 +112,10 @@
   text-align: left;
 }
 
+input {
+  margin-bottom: 0px;
+}
+
 .form-row input,
 .form-row select {
   width: 80%;
@@ -139,7 +143,7 @@
 @media (max-width: 480px) {
   .modal_edit {
     padding: 28px 28px;
-    width: 75%;
+    width: 95%;
   }
 
   .modal_block {
@@ -171,4 +175,5 @@
     border-radius: 22px;
     font-size: 14px;
   }
+
 }
