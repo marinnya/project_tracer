@@ -21,7 +21,9 @@ function App() {
       return;
     }
 
-    fetch("http://localhost:3000/auth/me", {
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+    fetch(`${apiUrl}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => {
