@@ -1,4 +1,3 @@
-
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -15,6 +14,7 @@
   border-radius: 20px;
   padding: 30px 40px;
   width: 460px;
+  max-width: calc(100vw - 32px);
   position: relative;
   text-align: center;
 }
@@ -25,6 +25,7 @@
   border-radius: 20px;
   padding: 32px 40px;
   width: 520px;
+  max-width: calc(100vw - 32px);
   position: relative;
 }
 
@@ -34,6 +35,7 @@
   border-radius: 20px;
   padding: 32px 40px;
   width: 460px;
+  max-width: calc(100vw - 32px);
   position: relative;
   text-align: center;
 }
@@ -126,29 +128,30 @@ input {
   box-sizing: border-box;
 }
 
-/* Адаптация */
+/* Адаптация 640px */
 @media (max-width: 640px) {
   .modal_block {
-    width: 75%;
+    width: 90%;
+    padding: 28px 28px;
   }
 }
 
+/* Адаптация 576px */
 @media (max-width: 576px) {
   .modal_edit {
+    width: 90%;
     padding: 28px 28px;
-    width: 75%;
   }
 }
 
+/* Адаптация 480px */
 @media (max-width: 480px) {
+  .modal,
+  .modal_block,
   .modal_edit {
-    padding: 28px 28px;
-    width: 95%;
-  }
-
-  .modal_block {
-    padding: 34px 28px;
-    width: 75%;
+    width: calc(100vw - 32px);
+    padding: 24px 20px;
+    border-radius: 16px;
   }
 
   .modal_block h2,
@@ -169,11 +172,10 @@ input {
     width: 100%;
   }
 
-  .btn {
-    height: 44px;
-    width: 246px;
-    border-radius: 22px;
-    font-size: 14px;
+  /* Кнопки растягиваем на всю ширину модалки */
+  .modal_block .btn,
+  .modal_block .modal-ok {
+    width: 100%;
+    box-sizing: border-box;
   }
-
 }
