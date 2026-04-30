@@ -220,78 +220,90 @@ export default function Dashboard({ onLogout }: Props) {
               </thead>
 
               <tbody>
-                {sorted.map((project) => (
-                  <tr
-                    key={project.id}
-                    className={showArchive ? "" : "clickable"}
-                    onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
-                  >
-                    <td className="name">{project.name}</td>
-                    <td>{formatDate(project.startDate)}</td>
-                    <td>{formatDate(project.endDate)}</td>
-                    <td>{project.responsible}</td>
-                    <td>
-                      <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
-                        {project.status}
-                      </span>
+                {sorted.length === 0 ? (
+                  <tr>
+                    <td colSpan={showArchive && role === "ADMIN" ? 6 : 5} className="empty-state-table">
+                      {showArchive ? "Нет проектов в архиве" : "Нет активных проектов"}
                     </td>
-                    {showArchive && role === "ADMIN" && (
+                  </tr>
+                ) : (
+                  sorted.map((project) => (
+                    <tr
+                      key={project.id}
+                      className={showArchive ? "" : "clickable"}
+                      onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
+                    >
+                      <td className="name">{project.name}</td>
+                      <td>{formatDate(project.startDate)}</td>
+                      <td>{formatDate(project.endDate)}</td>
+                      <td>{project.responsible}</td>
                       <td>
-                        <span
-                          className="status edit"
-                          onClick={(e) => handleUnarchive(e, project.id)}
-                        >
-                          Вернуть
+                        <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
+                          {project.status}
                         </span>
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      {showArchive && role === "ADMIN" && (
+                        <td>
+                          <span
+                            className="status edit"
+                            onClick={(e) => handleUnarchive(e, project.id)}
+                          >
+                            Вернуть
+                          </span>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           {/* Мобильная версия */}
           <div className="projects-mobile">
-            {sorted.map((project) => (
-              <div
-                key={project.id}
-                className={showArchive ? "project-card" : "project-card clickable"}
-                onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
-              >
-                <div className="project-card-header">
-                  <div className="project-title">{project.name}</div>
-                </div>
-
-                <div className="project-info">
-                  <div className="project-dates">
-                    {formatDate(project.startDate)} – {formatDate(project.endDate)}
-                  </div>
-
-                  <div className="status-actions">
-                    <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
-                      {project.status}
-                    </span>
-
-                    {showArchive && role === "ADMIN" && (
-                      <span
-                        className="status edit"
-                        onClick={(e) => handleUnarchive(e, project.id)}
-                      >
-                        Вернуть
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="project-responsible">
-                  <img src="/responsible.png" alt="Ответственный" />
-                  <span>{project.responsible}</span>
-                </div>
-
-                
+            {sorted.length === 0 ? (
+              <div className="empty-state">
+                {showArchive ? "Нет проектов в архиве" : "Нет активных проектов"}
               </div>
-            ))}
+            ) : (
+              sorted.map((project) => (
+                <div
+                  key={project.id}
+                  className={showArchive ? "project-card" : "project-card clickable"}
+                  onClick={() => !showArchive && navigate(`/projects/${project.id}`)}
+                >
+                  <div className="project-card-header">
+                    <div className="project-title">{project.name}</div>
+                  </div>
+
+                  <div className="project-info">
+                    <div className="project-dates">
+                      {formatDate(project.startDate)} – {formatDate(project.endDate)}
+                    </div>
+
+                    <div className="status-actions">
+                      <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
+                        {project.status}
+                      </span>
+
+                      {showArchive && role === "ADMIN" && (
+                        <span
+                          className="status edit"
+                          onClick={(e) => handleUnarchive(e, project.id)}
+                        >
+                          Вернуть
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="project-responsible">
+                    <img src="/responsible.png" alt="Ответственный" />
+                    <span>{project.responsible}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </main>
     </div>

@@ -516,11 +516,18 @@
   cursor: pointer;
 }
 
+/* нет проектов/сотрудников*/
 .empty-state {
   text-align: center;
   padding: 40px 16px;
   color: #888;
   font-size: 14px;
+}
+
+.empty-state-table {
+  text-align: center;
+  padding: 20px;
+  color: #888;
 }
 
 /* Видимость по размеру экрана */
