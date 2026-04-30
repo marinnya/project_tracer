@@ -144,54 +144,56 @@ function ProjectDefectSection({
                 )}
               </div>
 
-              <div className="section-row-defect">
-                <label>Тип дефекта*</label>
-                <select
-                  value={defect.typeId}
+              <div className="defect-fields">
+                <div className="section-row-defect">
+                  <label>Тип дефекта*</label>
+                  <select
+                    value={defect.typeId}
+                    onChange={e => {
+                      const selected = defectTypes.find(d => d.id === Number(e.target.value));
+                      updateDefect(defect.id, {
+                        typeId: Number(e.target.value) || "",
+                        typeName: selected?.name ?? "",
+                      });
+                    }}
+                  >
+                    <option value="">Выберите тип дефекта</option>
+                    {defectTypes.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="section-row-defect">
+                  <label>Количество страниц*</label>
+                  <select
+                    value={defect.pages}
+                    onChange={e => updateDefect(defect.id, { pages: Number(e.target.value) || "" })}
+                  >
+                    {pageOptions.map(n => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <input
+                  id={`defect-upload-${defect.id}`}
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  style={{ display: "none" }}
                   onChange={e => {
-                    const selected = defectTypes.find(d => d.id === Number(e.target.value));
-                    updateDefect(defect.id, {
-                      typeId: Number(e.target.value) || "",
-                      typeName: selected?.name ?? "",
-                    });
+                    if (!e.target.files) return;
+                    handleAddFiles(defect, e.target.files);
+                    e.target.value = "";
                   }}
-                >
-                  <option value="">Выберите тип дефекта</option>
-                  {defectTypes.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
+                />
+
+                <label htmlFor={`defect-upload-${defect.id}`} className="file-row-defect">
+                  <img src="/clip.png" alt="attach" />
+                  <span>Выберите файлы (до 10 Мб)</span>
+                </label>
               </div>
-
-              <div className="section-row-defect">
-                <label>Количество страниц*</label>
-                <select
-                  value={defect.pages}
-                  onChange={e => updateDefect(defect.id, { pages: Number(e.target.value) || "" })}
-                >
-                  {pageOptions.map(n => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </div>
-
-              <input
-                id={`defect-upload-${defect.id}`}
-                type="file"
-                multiple
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={e => {
-                  if (!e.target.files) return;
-                  handleAddFiles(defect, e.target.files);
-                  e.target.value = "";
-                }}
-              />
-
-              <label htmlFor={`defect-upload-${defect.id}`} className="file-row-defect">
-                <img src="/clip.png" alt="attach" />
-                <span>Выберите файлы (до 10 Мб)</span>
-              </label>
 
               {defects.length > 1 && (
                 <button className="delete-btn desktop-only" onClick={() => removeDefect(defect.id)}>✕</button>
