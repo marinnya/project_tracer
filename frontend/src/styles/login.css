@@ -1,6 +1,9 @@
+/* =============================================
+   LOGIN PAGE
+   ============================================= */
 
 .page {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -37,11 +40,10 @@
   color: #888;
 }
 
-/* Карточка формы */
 .card {
   margin-top: 50px;
   background: white;
-  padding: 32px 60px;
+  padding: 32px 60px 32px 60px;
   border-radius: 16px;
   width: 270px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
@@ -50,10 +52,13 @@
 .card h2 {
   font-size: 22px;
   font-weight: 600;
-  margin: 0 0 20px;
 }
 
-/* Переключатель ролей */
+/* margin-bottom только для инпутов внутри карточки логина */
+.card input {
+  margin-bottom: 12px;
+}
+
 .tabs {
   display: flex;
   gap: 45px;
@@ -61,17 +66,17 @@
 }
 
 .tabs button {
-  padding: 8px 0;
+  padding: 8px 0px;
   border: none;
   background: transparent;
   cursor: pointer;
   color: #777;
-  font-size: 14px;
+  text-align: left;
   position: relative;
 }
 
 .tabs .active {
-  color: #000;
+  color: #000000;
 }
 
 .tabs .active::after {
@@ -81,21 +86,17 @@
   left: 0;
   height: 2px;
   width: 100%;
-  background: #2aa3ff;
+  background-color: #2aa3ff;
 }
 
-/* Поля ввода */
 input {
   width: 100%;
   padding: 10px;
-  margin-bottom: 12px;
   border-radius: 6px;
   border: 1px solid #ccc;
   box-sizing: border-box;
-  font-size: 14px;
 }
 
-/* Кнопки */
 .primary {
   width: 100%;
   padding: 10px;
@@ -105,20 +106,18 @@ input {
   border-radius: 6px;
   cursor: pointer;
   height: 37px;
-  font-size: 14px;
 }
 
 .back {
   width: 100%;
   padding: 10px;
-  background: #fff;
+  background: #ffffff;
   color: #2aa3ff;
   border: 1px solid #2aa3ff;
   border-radius: 6px;
   cursor: pointer;
   height: 37px;
   margin-top: 10px;
-  font-size: 14px;
 }
 
 .link {
@@ -130,9 +129,8 @@ input {
   font-size: 13px;
 }
 
-/* Ошибка */
 .error {
-  color: #d64545;
+  color: red;
   margin-bottom: 10px;
   font-size: 13px;
 }
@@ -141,7 +139,6 @@ p {
   font-size: 13px;
 }
 
-/* Карточка восстановления пароля */
 .page_recovery {
   min-height: 100vh;
   display: flex;
@@ -163,18 +160,20 @@ p {
   font-weight: 600;
 }
 
-/* Адаптация */
 @media (max-width: 480px) {
   .card {
-    width: 70%;
-    max-width: 320px;
+    width: 75%;
+    max-width: 340px;
     padding: 30px 36px;
     margin-top: 30px;
   }
 
   .card_recovery {
+    background: white;
     padding: 30px 30px;
+    border-radius: 16px;
     width: 280px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
     transform: translateY(-50px);
   }
 }

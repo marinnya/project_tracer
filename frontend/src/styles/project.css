@@ -1,19 +1,19 @@
+/* =============================================
+   PROJECT PAGE
+   ============================================= */
 
-/* Серый фон под шапкой */
 .project-page-bg {
   background: #f5f5f5;
   min-height: calc(100vh - 72px);
 }
 
-/* Белый контейнер по центру */
 .project-container {
   max-width: 1100px;
   margin: 0 auto;
-  background: #fff;
+  background: #ffffff;
   padding: 36px 78px;
 }
 
-/* Заголовок проекта */
 .project-header {
   display: flex;
   align-items: center;
@@ -25,29 +25,6 @@
   font-weight: 600;
 }
 
-/* Кнопка назад */
-.back-button {
-  border: none;
-  background: none;
-  padding: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  position: absolute;
-  left: 20px;
-}
-
-.back-button img {
-  width: 13px;
-  height: 26px;
-  opacity: 0.7;
-}
-
-.back-button:hover img {
-  opacity: 1;
-}
-
-/* Мета-информация проекта */
 .project-meta {
   display: flex;
   gap: 60px;
@@ -55,31 +32,6 @@
   margin-bottom: 32px;
 }
 
-.meta-top {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-
-.meta-dates {
-  display: flex;
-  gap: 40px;
-}
-
-.responsible-field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: #333;
-}
-
-.responsible-field img {
-  width: 18px;
-  height: 18px;
-}
-
-/* Поле даты */
 .date-field {
   display: grid;
   grid-template-columns: max-content auto;
@@ -97,10 +49,13 @@
   border-radius: 8px;
   border: 1px solid #ddd;
   max-width: 140px;
-  font-size: 14px;
+  margin-bottom: 0;
 }
 
-/* Секции проекта */
+.date-field input[type="date"] {
+  margin-bottom: 0;
+}
+
 .project-section {
   margin-bottom: 40px;
   position: relative;
@@ -113,7 +68,7 @@
   bottom: -15px;
   height: 0.5px;
   width: 100%;
-  background: #dfe4e9;
+  background: #DFE4E9;
 }
 
 .project-section h3 {
@@ -130,14 +85,13 @@
 }
 
 .section-row label {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .section-row select {
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid #ddd;
-  font-size: 14px;
 }
 
 .section-row-defect {
@@ -147,17 +101,15 @@
 }
 
 .section-row-defect label {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .section-row-defect select {
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid #ddd;
-  font-size: 14px;
 }
 
-/* Строка прикрепления файла */
 .file-row {
   display: flex;
   align-items: flex-end;
@@ -187,7 +139,202 @@
   height: 18px;
 }
 
-/* Список прикреплённых файлов */
+.responsible-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #333;
+}
+
+.responsible-field img {
+  width: 18px;
+  height: 18px;
+}
+
+.add-defect-btn {
+  background: #ffffff;
+  color: #777;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  height: 40px;
+  min-width: 190px;
+  border-radius: 14px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: 0.2s;
+  margin-top: 25px;
+  padding-left: 10px;
+}
+
+.add-defect-btn img {
+  width: 25px;
+  height: 25px;
+}
+
+.project-footer {
+  margin-top: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.buttons {
+  display: flex;
+  gap: 16px;
+}
+
+.btn {
+  height: 44px;
+  width: 220px;
+  border-radius: 24px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn.secondary {
+  background: #fff;
+  border: 1px solid #2aa3ff;
+  color: #2aa3ff;
+}
+
+.btn.primary {
+  background: #2aa3ff;
+  border: none;
+  color: #fff;
+}
+
+.btn:disabled {
+  background: #d6ecff;
+  cursor: not-allowed;
+}
+
+.warning {
+  font-size: 12px;
+  color: #e53935;
+}
+
+/* Прогресс-бар */
+.progress-wrapper {
+  margin: 16px 0;
+}
+
+.progress-label {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #1976d2;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* Кнопка назад */
+.back-button {
+  border: none;
+  background: none;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  left: 20px;
+  position: absolute;
+}
+
+.back-button img {
+  width: 13px;
+  height: 26px;
+  opacity: 0.7;
+}
+
+.back-button:hover img {
+  opacity: 1;
+}
+
+.windows {
+  display: flex;
+  gap: 45px;
+  align-items: center;
+}
+
+.defect-card {
+  margin-bottom: 10px;
+  padding: 16px;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  background: #fafafa;
+}
+
+.defect-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  font-size: 16px;
+}
+
+.delete-btn:hover {
+  color: #000;
+}
+
+.defect-number {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.defect-row {
+  display: flex;
+  align-items: center;
+  gap: 45px;
+  flex-wrap: nowrap;
+}
+
+.meta-top {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.meta-dates {
+  display: flex;
+  gap: 40px;
+}
+
+/* Список файлов */
 .file-list {
   list-style: none;
   padding: 0;
@@ -228,14 +375,15 @@
 }
 
 .file-remove:hover {
-  color: #d64545;
+  color: #e53935;
 }
 
+/* Кнопка "показать все" — оригинальный цвет */
 .file-list-toggle {
   background: none;
   border: none;
   cursor: pointer;
-  color: #2aa3ff;
+  color: #1976d2;
   font-size: 13px;
   padding: 4px 0;
   text-align: left;
@@ -243,162 +391,8 @@
 }
 
 .file-list-toggle:hover {
-  color: #1a8ae0;
+  color: #1251a3;
   text-decoration: underline;
-}
-
-/* Дефекты */
-.add-defect-btn {
-  background: #fff;
-  color: #777;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: none;
-  height: 40px;
-  min-width: 190px;
-  border-radius: 14px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: 0.2s;
-  margin-top: 25px;
-  padding-left: 10px;
-}
-
-.add-defect-btn img {
-  width: 25px;
-  height: 25px;
-}
-
-.defect-card {
-  margin-bottom: 10px;
-  padding: 16px;
-  border: 1px solid #eee;
-  border-radius: 12px;
-  background: #fafafa;
-}
-
-.defect-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 12px;
-  font-weight: 500;
-}
-
-.defect-number {
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.defect-row {
-  display: flex;
-  align-items: center;
-  gap: 45px;
-  flex-wrap: nowrap;
-}
-
-.delete-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #999;
-  font-size: 16px;
-}
-
-.delete-btn:hover {
-  color: #000;
-}
-
-.windows {
-  display: flex;
-  gap: 45px;
-  align-items: center;
-}
-
-/* Подвал страницы */
-.project-footer {
-  margin-top: 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-}
-
-input[type="checkbox"] {
-  width: auto;
-  margin: 0;
-}
-
-.buttons {
-  display: flex;
-  gap: 16px;
-}
-
-/* Кнопки */
-.btn {
-  height: 44px;
-  width: 220px;
-  border-radius: 24px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: 0.2s;
-  border: none;
-}
-
-.btn.secondary {
-  background: #fff;
-  border: 1px solid #2aa3ff;
-  color: #2aa3ff;
-}
-
-.btn.primary {
-  background: #2aa3ff;
-  color: #fff;
-}
-
-.btn:disabled {
-  background: #d6ecff;
-  color: #fff;
-  cursor: not-allowed;
-}
-
-/* Предупреждение */
-.warning {
-  font-size: 12px;
-  color: #d64545;
-}
-
-/* Прогресс-бар загрузки */
-.progress-wrapper {
-  margin: 16px 0;
-}
-
-.progress-label {
-  font-size: 14px;
-  color: #555;
-  margin-bottom: 6px;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background: #e0e0e0;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: #2aa3ff;
-  border-radius: 4px;
-  transition: width 0.3s ease;
 }
 
 /* Адаптация 906px */
@@ -419,7 +413,7 @@ input[type="checkbox"] {
 /* Адаптация 768px */
 @media (max-width: 768px) {
   .project-container {
-    padding: 20px;
+    padding: 20px 20px;
   }
 
   .back-button {
@@ -432,23 +426,29 @@ input[type="checkbox"] {
     gap: 12px;
   }
 
+  .desktop-only {
+    display: none;
+  }
+
+  .mobile-only {
+    display: inline-flex;
+  }
+
   .project-meta {
+    display: flex;
     flex-direction: column;
     gap: 16px;
   }
 
   .meta-top {
+    display: flex;
+    align-items: center;
     gap: 12px;
   }
 
   .meta-dates {
+    display: flex;
     gap: 20px;
-  }
-
-  .date-field {
-    flex-direction: column;
-    gap: 6px;
-    align-items: flex-start;
   }
 
   .date-field input {
@@ -468,20 +468,28 @@ input[type="checkbox"] {
   }
 
   .buttons {
+    display: flex;
     flex-direction: column;
     align-items: center;
     gap: 12px;
   }
 
   .project-footer {
-    margin-top: 0;
+    margin-top: 0px;
+  }
+
+  .date-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
   }
 }
 
 /* Адаптация 480px */
 @media (max-width: 480px) {
   .section-row label {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .file-row {
