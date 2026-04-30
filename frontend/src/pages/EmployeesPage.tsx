@@ -248,24 +248,52 @@ export default function EmployeesPage({ onLogout }: Props) {
               </thead>
 
               <tbody>
-                {sortedEmployees.map((employee) => (
-                  <tr key={employee.id}>
-                    <td className="name">{employee.lastName} {employee.firstName}</td>
-                    <td>{employee.login}</td>
-                    <td>{employee.isBlocked ? "Заблокирован" : "Активен"}</td>
-                    <td className="status-actions">
-                      <span className="status edit" onClick={(e) => { e.stopPropagation(); openEditModal(employee as unknown as Employee); }}>
-                        Редактировать
-                      </span>
-                      <span className="status block" onClick={(e) => { e.stopPropagation(); openBlockModal(employee as unknown as Employee); }}>
-                        {employee.isBlocked ? "Разблокировать" : "Блокировать"}
-                      </span>
-                      <span className="status delete" onClick={(e) => { e.stopPropagation(); openDeleteModal(employee as unknown as Employee); }}>
-                        Удалить
-                      </span>
+                {sortedEmployees.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="empty-state-table">
+                      {showArchive
+                        ? "Нет заблокированных сотрудников"
+                        : "Нет активных сотрудников"}
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  sortedEmployees.map((employee) => (
+                    <tr key={employee.id}>
+                      <td className="name">{employee.lastName} {employee.firstName}</td>
+                      <td>{employee.login}</td>
+                      <td>{employee.isBlocked ? "Заблокирован" : "Активен"}</td>
+                      <td className="status-actions">
+                        <span
+                          className="status edit"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(employee as unknown as Employee);
+                          }}
+                        >
+                          Редактировать
+                        </span>
+                        <span
+                          className="status block"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openBlockModal(employee as unknown as Employee);
+                          }}
+                        >
+                          {employee.isBlocked ? "Разблокировать" : "Блокировать"}
+                        </span>
+                        <span
+                          className="status delete"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteModal(employee as unknown as Employee);
+                          }}
+                        >
+                          Удалить
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
