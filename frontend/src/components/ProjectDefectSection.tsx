@@ -17,7 +17,7 @@ type SavedPhoto = {
   id: number;
   originalName: string;
   order: number;
-  yandexPath: string | null; // если заполнен — фото уже на Яндекс.Диске, крестик не показываем
+  yandexPath: string | null;
 };
 
 type SavedDefect = {
@@ -195,10 +195,10 @@ function ProjectDefectSection({
 
             {allFiles.length > 0 && (
               <ul className="file-list">
+                <p className="file-list-label">Добавленные файлы</p>
                 {isExpanded && allFiles.map((item, i) => (
                   <li key={`${item.name}-${i}`} className="file-item">
                     <span className="file-name">{item.name}</span>
-                    {/* крестик скрыт если фото уже загружено на Яндекс.Диск */}
                     {!item.onYandex && (
                       <button
                         className="file-remove"

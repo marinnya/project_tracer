@@ -3,7 +3,7 @@ import { useRef, useState, useMemo } from "react";
 type SavedPhoto = {
   id: number;
   originalName: string;
-  yandexPath: string | null; // если заполнен — фото уже на Яндекс.Диске, крестик не показываем
+  yandexPath: string | null;
 };
 
 type Props = {
@@ -114,10 +114,10 @@ function ProjectSection({
 
       {allFiles.length > 0 && (
         <ul className="file-list">
+          <p className="file-list-label">Добавленные файлы</p>
           {expanded && allFiles.map((item, index) => (
             <li key={`${item.name}-${index}`} className="file-item">
               <span className="file-name">{item.name}</span>
-              {/* крестик скрыт если фото уже загружено на Яндекс.Диск */}
               {!item.onYandex && (
                 <button
                   className="file-remove"
