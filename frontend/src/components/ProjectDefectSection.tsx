@@ -137,7 +137,12 @@ function ProjectDefectSection({
         return (
           <div key={defect.id} className="defect-card">
             <div className="defect-row">
-              <span className="defect-number">№{index + 1}</span>
+              <div className="defect-number-row">
+                <span className="defect-number">№{index + 1}</span>
+                {defects.length > 1 && (
+                  <button className="delete-btn mobile-only" onClick={() => removeDefect(defect.id)}>✕</button>
+                )}
+              </div>
 
               <div className="section-row-defect">
                 <label>Тип дефекта*</label>
@@ -189,7 +194,7 @@ function ProjectDefectSection({
               </label>
 
               {defects.length > 1 && (
-                <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
+                <button className="delete-btn desktop-only" onClick={() => removeDefect(defect.id)}>✕</button>
               )}
             </div>
 
