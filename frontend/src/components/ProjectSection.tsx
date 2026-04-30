@@ -114,27 +114,31 @@ function ProjectSection({
 
       {allFiles.length > 0 && (
         <ul className="file-list">
-          <p className="file-list-label">Добавленные файлы</p>
-          {expanded && allFiles.map((item, index) => (
-            <li key={`${item.name}-${index}`} className="file-item">
-              <span className="file-name">{item.name}</span>
-              {!item.onYandex && (
-                <button
-                  className="file-remove"
-                  onClick={() => {
-                    if (item.isSaved) {
-                      onRemoveSaved(item.id!);
-                    } else {
-                      removeNewFile(item.name);
-                    }
-                  }}
-                  title="Удалить файл"
-                >
-                  ✕
-                </button>
-              )}
-            </li>
-          ))}
+          {expanded && (
+            <>
+              <p className="file-list-label">Добавленные файлы</p>
+              {allFiles.map((item, index) => (
+                <li key={`${item.name}-${index}`} className="file-item">
+                  <span className="file-name">{item.name}</span>
+                  {!item.onYandex && (
+                    <button
+                      className="file-remove"
+                      onClick={() => {
+                        if (item.isSaved) {
+                          onRemoveSaved(item.id!);
+                        } else {
+                          removeNewFile(item.name);
+                        }
+                      }}
+                      title="Удалить файл"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </li>
+              ))}
+            </>
+          )}
 
           <button
             className="file-list-toggle"

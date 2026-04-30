@@ -195,27 +195,31 @@ function ProjectDefectSection({
 
             {allFiles.length > 0 && (
               <ul className="file-list">
-                <p className="file-list-label">Добавленные файлы</p>
-                {isExpanded && allFiles.map((item, i) => (
-                  <li key={`${item.name}-${i}`} className="file-item">
-                    <span className="file-name">{item.name}</span>
-                    {!item.onYandex && (
-                      <button
-                        className="file-remove"
-                        onClick={() => {
-                          if (item.isSaved) {
-                            onRemoveSavedPhoto(item.id!);
-                          } else {
-                            removeNewFile(defect.id, item.name);
-                          }
-                        }}
-                        title="Удалить файл"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </li>
-                ))}
+                {isExpanded && (
+                  <>
+                    <p className="file-list-label">Добавленные файлы</p>
+                    {allFiles.map((item, i) => (
+                      <li key={`${item.name}-${i}`} className="file-item">
+                        <span className="file-name">{item.name}</span>
+                        {!item.onYandex && (
+                          <button
+                            className="file-remove"
+                            onClick={() => {
+                              if (item.isSaved) {
+                                onRemoveSavedPhoto(item.id!);
+                              } else {
+                                removeNewFile(defect.id, item.name);
+                              }
+                            }}
+                            title="Удалить файл"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </>
+                )}
 
                 <button
                   className="file-list-toggle"
