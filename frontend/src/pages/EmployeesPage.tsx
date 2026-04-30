@@ -271,27 +271,35 @@ export default function EmployeesPage({ onLogout }: Props) {
           </div>
 
           <div className="employees-mobile">
-            {filteredEmployees.map(employee => (
-              <div key={employee.id} className="employee-card">
-                <div className="employee-info">
-                  <div className="employee-name">
-                    {employee.lastName} {employee.firstName}
-                  </div>
-                  <div className="employee-credentials">
-                    <div className="employee-login">{employee.login}</div>
-                    <div className="employee-login">
-                      {employee.isBlocked ? "заблокирован" : "активен"}
+            {filteredEmployees.length === 0 ? (
+              <div className="empty-state">
+                {showArchive
+                  ? "Нет заблокированных сотрудников"
+                  : "Нет активных сотрудников"}
+              </div>
+            ) : (
+              filteredEmployees.map(employee => (
+                <div key={employee.id} className="employee-card">
+                  <div className="employee-info">
+                    <div className="employee-name">
+                      {employee.lastName} {employee.firstName}
+                    </div>
+                    <div className="employee-credentials">
+                      <div className="employee-login">{employee.login}</div>
+                      <div className="employee-login">
+                        {employee.isBlocked ? "заблокирован" : "активен"}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="employee-actions">
-                  <img src="/edit.png" alt="Редактировать" onClick={() => openEditModal(employee as unknown as Employee)} />
-                  <img src="/lock.png" alt="Блокировать" onClick={() => openBlockModal(employee as unknown as Employee)} />
-                  <img src="/trash.png" alt="Удалить" onClick={() => openDeleteModal(employee as unknown as Employee)} />
+                  <div className="employee-actions">
+                    <img src="/edit.png" alt="" onClick={() => openEditModal(employee as unknown as Employee)} />
+                    <img src="/lock.png" alt="" onClick={() => openBlockModal(employee as unknown as Employee)} />
+                    <img src="/trash.png" alt="" onClick={() => openDeleteModal(employee as unknown as Employee)} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           {showModalEdit && selectedEmployee && (

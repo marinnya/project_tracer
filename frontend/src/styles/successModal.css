@@ -187,3 +187,11 @@ input {
     box-sizing: border-box;
   }
 }
+
+@media (max-width: 340px) {
+    .modal_block h2, .modal_edit h2 {
+      flex-wrap: wrap;
+      white-space: normal;
+      padding-right: 40px;
+    }
+}

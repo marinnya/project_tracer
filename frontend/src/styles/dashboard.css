@@ -516,6 +516,13 @@
   cursor: pointer;
 }
 
+.empty-state {
+  text-align: center;
+  padding: 40px 16px;
+  color: #888;
+  font-size: 14px;
+}
+
 /* Видимость по размеру экрана */
 .mobile-only {
   display: none;
