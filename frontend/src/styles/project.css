@@ -484,18 +484,26 @@ input[type="checkbox"] {
     max-width: 125px;
   }
 
-  /* На мобилке держим все поля в одну строку, скрываем лейблы */
+  /* Номер + крестик на первой строке, поля на второй */
   .defect-row {
-    flex-wrap: nowrap;
-    align-items: flex-start;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .defect-number-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
     gap: 8px;
   }
 
   .defect-fields {
     flex-wrap: nowrap;
-    gap: 8px 12px;
+    gap: 8px;
     flex: 1;
     min-width: 0;
+    width: 100%;
   }
 
   .section-row-defect label {
@@ -542,12 +550,6 @@ input[type="checkbox"] {
 
 /* Адаптация 385px */
 @media (max-width: 385px) {
-  .defect-row {
-    gap: 12px 20px;
-    flex-wrap: wrap;
-    align-items: baseline;
-  }
-
   .defect-number {
     width: 100%;
   }
