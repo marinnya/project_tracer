@@ -172,7 +172,15 @@ input {
     width: 100%;
   }
 
-  /* Кнопки растягиваем на всю ширину модалки */
+  .modal_block .btn,
+  .modal_block .modal-ok {
+    width: 60%;
+    box-sizing: border-box;
+  }
+}
+
+/* Кнопки растягиваем на всю ширину модалки */
+@media (max-width: 410px) {
   .modal_block .btn,
   .modal_block .modal-ok {
     width: 100%;
