@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import "../styles/dashboard.css";
-import "../styles/spinner.css";
 import Header from "../components/Header";
 import AddModal from "../components/AddModal";
 import EditModal from "../components/EditModal";

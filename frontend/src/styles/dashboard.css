@@ -539,6 +539,19 @@
   display: inline-flex;
 }
 
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #2aa3ff;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Ограничение ширины на широких мониторах */
 @media (min-width: 1600px) {
   .content {

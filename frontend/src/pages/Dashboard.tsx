@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import "../styles/dashboard.css";
-import "../styles/spinner.css";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 import { useClickOutside } from "../hooks/useClickOutside";
