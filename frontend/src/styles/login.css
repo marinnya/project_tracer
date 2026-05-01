@@ -135,7 +135,7 @@ input {
 }
 
 .error {
-  color: red;
+  color: #d64545;
   margin-bottom: 10px;
   font-size: 13px;
 }
@@ -171,18 +171,19 @@ p {
 
 @media (max-width: 480px) {
   .card {
-    width: 75%;
+    width: 92%;
     max-width: 340px;
     padding: 30px 36px;
     margin-top: 30px;
   }
 
   .card_recovery {
-    background: white;
-    padding: 30px 30px;
+    background: #fff;
+    padding: 30px;
     border-radius: 16px;
-    width: 280px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    width: 92%;
+    box-shadow: 0 10px 30px #0000000d;
     transform: translateY(-50px);
+    max-width: 340px;
   }
 }
