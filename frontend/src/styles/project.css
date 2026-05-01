@@ -317,13 +317,7 @@ input[type="checkbox"] {
   white-space: nowrap;
 }
 
-/* Обёртка номера и мобильного крестика */
-.defect-number-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
+/* Десктопная строка дефекта */
 .defect-row {
   display: flex;
   align-items: center;
@@ -331,14 +325,31 @@ input[type="checkbox"] {
   flex-wrap: nowrap;
 }
 
-/* Обёртка полей дефекта (тип, страницы, файл) */
-.defect-fields {
+/* Мобильный блок дефекта — скрыт на десктопе */
+.defect-mobile {
+  display: none;
+}
+
+.defect-mobile-header {
   display: flex;
   align-items: center;
-  gap: 45px;
-  flex-wrap: nowrap;
-  flex: 1;
-  min-width: 0;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+/* Строка 2: тип + страницы на одной строке */
+.defect-mobile-selects {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.defect-mobile-selects select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 14px;
 }
 
 .meta-top {
@@ -427,11 +438,6 @@ input[type="checkbox"] {
     align-items: center;
   }
 
-  .defect-fields {
-    flex-wrap: wrap;
-    gap: 12px 20px;
-  }
-
   .windows {
     gap: 5px 20px;
     flex-wrap: wrap;
@@ -463,6 +469,11 @@ input[type="checkbox"] {
     display: inline-flex;
   }
 
+  /* Мобильный блок дефекта */
+  .defect-mobile {
+    display: block;
+  }
+
   .project-meta {
     display: flex;
     flex-direction: column;
@@ -482,32 +493,6 @@ input[type="checkbox"] {
 
   .date-field input {
     max-width: 125px;
-  }
-
-  /* Номер + крестик на первой строке, поля на второй */
-  .defect-row {
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .defect-number-row {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .defect-fields {
-    flex-wrap: nowrap;
-    gap: 8px;
-    flex: 1;
-    min-width: 0;
-    width: 100%;
-  }
-
-  .section-row-defect label {
-    display: none;
   }
 
   .add-defect-btn {
@@ -550,10 +535,6 @@ input[type="checkbox"] {
 
 /* Адаптация 385px */
 @media (max-width: 385px) {
-  .defect-number {
-    width: 100%;
-  }
-
   .section-row-defect,
   .section-row {
     flex-wrap: nowrap;

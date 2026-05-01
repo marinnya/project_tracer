@@ -136,68 +136,117 @@ function ProjectDefectSection({
 
         return (
           <div key={defect.id} className="defect-card">
-            <div className="defect-row">
-              <div className="defect-number-row">
+            {/* Десктоп: всё в одну строку */}
+            <div className="defect-row desktop-only">
+              <span className="defect-number">№{index + 1}</span>
+
+              <div className="section-row-defect">
+                <label>Тип дефекта*</label>
+                <select
+                  value={defect.typeId}
+                  onChange={e => {
+                    const selected = defectTypes.find(d => d.id === Number(e.target.value));
+                    updateDefect(defect.id, {
+                      typeId: Number(e.target.value) || "",
+                      typeName: selected?.name ?? "",
+                    });
+                  }}
+                >
+                  <option value="">Выберите тип дефекта</option>
+                  {defectTypes.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="section-row-defect">
+                <label>Количество страниц*</label>
+                <select
+                  value={defect.pages}
+                  onChange={e => updateDefect(defect.id, { pages: Number(e.target.value) || "" })}
+                >
+                  {pageOptions.map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+
+              <input
+                id={`defect-upload-desktop-${defect.id}`}
+                type="file"
+                multiple
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={e => {
+                  if (!e.target.files) return;
+                  handleAddFiles(defect, e.target.files);
+                  e.target.value = "";
+                }}
+              />
+
+              <label htmlFor={`defect-upload-desktop-${defect.id}`} className="file-row-defect">
+                <img src="/clip.png" alt="attach" />
+                <span>Выберите файлы (до 10 Мб)</span>
+              </label>
+
+              {defects.length > 1 && (
+                <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
+              )}
+            </div>
+
+            {/* Мобильный: строка 1 — номер + крестик, строка 2 — тип + страницы, строка 3 — файл */}
+            <div className="defect-mobile mobile-only">
+              <div className="defect-mobile-header">
                 <span className="defect-number">№{index + 1}</span>
                 {defects.length > 1 && (
-                  <button className="delete-btn mobile-only" onClick={() => removeDefect(defect.id)}>✕</button>
+                  <button className="delete-btn" onClick={() => removeDefect(defect.id)}>✕</button>
                 )}
               </div>
 
-              <div className="defect-fields">
-                <div className="section-row-defect">
-                  <label>Тип дефекта*</label>
-                  <select
-                    value={defect.typeId}
-                    onChange={e => {
-                      const selected = defectTypes.find(d => d.id === Number(e.target.value));
-                      updateDefect(defect.id, {
-                        typeId: Number(e.target.value) || "",
-                        typeName: selected?.name ?? "",
-                      });
-                    }}
-                  >
-                    <option value="">Выберите тип дефекта</option>
-                    {defectTypes.map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="section-row-defect">
-                  <label>Количество страниц*</label>
-                  <select
-                    value={defect.pages}
-                    onChange={e => updateDefect(defect.id, { pages: Number(e.target.value) || "" })}
-                  >
-                    {pageOptions.map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <input
-                  id={`defect-upload-${defect.id}`}
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  style={{ display: "none" }}
+              <div className="defect-mobile-selects">
+                <select
+                  value={defect.typeId}
                   onChange={e => {
-                    if (!e.target.files) return;
-                    handleAddFiles(defect, e.target.files);
-                    e.target.value = "";
+                    const selected = defectTypes.find(d => d.id === Number(e.target.value));
+                    updateDefect(defect.id, {
+                      typeId: Number(e.target.value) || "",
+                      typeName: selected?.name ?? "",
+                    });
                   }}
-                />
+                >
+                  <option value="">Выберите тип дефекта</option>
+                  {defectTypes.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
 
-                <label htmlFor={`defect-upload-${defect.id}`} className="file-row-defect">
-                  <img src="/clip.png" alt="attach" />
-                  <span>Выберите файлы (до 10 Мб)</span>
-                </label>
+                <select
+                  value={defect.pages}
+                  onChange={e => updateDefect(defect.id, { pages: Number(e.target.value) || "" })}
+                >
+                  {pageOptions.map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
               </div>
 
-              {defects.length > 1 && (
-                <button className="delete-btn desktop-only" onClick={() => removeDefect(defect.id)}>✕</button>
-              )}
+              <input
+                id={`defect-upload-mobile-${defect.id}`}
+                type="file"
+                multiple
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={e => {
+                  if (!e.target.files) return;
+                  handleAddFiles(defect, e.target.files);
+                  e.target.value = "";
+                }}
+              />
+
+              <label htmlFor={`defect-upload-mobile-${defect.id}`} className="file-row-defect">
+                <img src="/clip.png" alt="attach" />
+                <span>Выберите файлы (до 10 Мб)</span>
+              </label>
             </div>
 
             {allFiles.length > 0 && (
