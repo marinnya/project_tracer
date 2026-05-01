@@ -290,6 +290,14 @@ input[type="checkbox"] {
   border: 1px solid #eee;
   border-radius: 12px;
   background: #fafafa;
+  position: relative;
+}
+
+/* Крестик всегда в правом верхнем углу карточки */
+.defect-row .delete-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
 }
 
 .defect-header {
