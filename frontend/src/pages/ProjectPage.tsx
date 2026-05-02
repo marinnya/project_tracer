@@ -78,6 +78,8 @@ function ProjectPage({ onLogout }: Props) {
   const [completed, setCompleted] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalMessage, setModalMessage] = useState("");
+  const [shouldRedirect, setShouldRedirect] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -419,6 +421,8 @@ function ProjectPage({ onLogout }: Props) {
         }, 300);
       });
 
+      setModalMessage("Данные успешно записаны! Проект помещен в архив.")
+      setShouldRedirect(true);
       setShowModal(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
@@ -542,7 +546,12 @@ function ProjectPage({ onLogout }: Props) {
               <button
                 className="btn secondary"
                 onClick={async () => {
-                  try { await handleSave(); alert("Данные сохранены"); }
+                  try { 
+                    await handleSave(); 
+                    setModalMessage("Данные успешно сохранены!");
+                    setShouldRedirect(false);
+                    setShowModal(true);
+                  }
                   catch (e: unknown) { alert(e instanceof Error ? e.message : "Ошибка сохранения"); }
                 }}
                 disabled={isUploading || isSaving}>
@@ -558,7 +567,16 @@ function ProjectPage({ onLogout }: Props) {
             </div>
 
             {showModal && (
-              <SuccessModal onClose={() => { setShowModal(false); navigate("/"); }} />
+              <SuccessModal message={modalMessage} 
+                onClose={() => { 
+                setShowModal(false);
+                
+                if (shouldRedirect) {
+                  setShouldRedirect(false);
+                  navigate("/");
+                }
+                }} 
+              />
             )}
           </div>
 

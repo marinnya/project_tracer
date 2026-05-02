@@ -540,7 +540,7 @@ input[type="checkbox"] {
   .project-meta {
     flex-wrap: wrap;
     gap: 8px 16px;
-    margin-bottom: 24px;
+    margin-bottom: 32px;
   }
 
   /* Скрываем десктопные поля дат */

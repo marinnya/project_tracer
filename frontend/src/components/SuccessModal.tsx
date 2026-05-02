@@ -1,17 +1,16 @@
-import "../styles/successModal.css";
-
 type Props = {
   onClose: () => void;
+  message: string;
 };
 
-export default function SuccessModal({ onClose }: Props) {
+export default function SuccessModal({ onClose, message }: Props) {
   return (
     <div className="modal-overlay">
       <div className="modal">
         <button className="modal-close" onClick={onClose}>×</button>
 
         <p className="modal-text">
-          Данные успешно записаны! Проект помещен в архив.
+          {message}
         </p>
 
         <button className="modal-ok" onClick={onClose}>
