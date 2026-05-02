@@ -26,6 +26,7 @@ export default function Dashboard({ onLogout }: Props) {
   const navigate = useNavigate();
   const [showArchive, setShowArchive] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const role = localStorage.getItem("role");
@@ -34,7 +35,10 @@ export default function Dashboard({ onLogout }: Props) {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const filterRef = useRef<HTMLDivElement>(null);
+  const sortRef = useRef<HTMLDivElement>(null);
+
   useClickOutside(filterRef as React.RefObject<HTMLElement>, () => setFilterOpen(false));
+  useClickOutside(sortRef as React.RefObject<HTMLElement>, () => setSortOpen(false));
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -58,6 +62,17 @@ export default function Dashboard({ onLogout }: Props) {
       setSortField(field);
       setSortDirection("asc");
     }
+  };
+
+  // мобильная сортировка: при повторном нажатии меняет направление
+  const handleMobileSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+    setSortOpen(false);
   };
 
   const sortProjects = (list: Project[]) => {
@@ -98,19 +113,23 @@ export default function Dashboard({ onLogout }: Props) {
     }
   };
 
-  // для таблицы на десктопе тире
   const formatDate = (date: string | null) => {
     if (!date) return "—";
     return new Date(date).toLocaleDateString("ru-RU");
   };
 
-  // для карточек на мобильном — текст
   const formatDateMobile = (date: string | null) => {
     if (!date) return "не указана";
     return new Date(date).toLocaleDateString("ru-RU");
   };
 
   const colSpan = showArchive && role === "ADMIN" ? 6 : 5;
+
+  const sortLabels: Record<SortField, string> = {
+    name: "Наименование",
+    startDate: "Дата начала",
+    endDate: "Дата окончания",
+  };
 
   return (
     <div className="dashboard">
@@ -120,6 +139,7 @@ export default function Dashboard({ onLogout }: Props) {
         <div className="content-header">
           <h1>{showArchive ? "Архив проектов" : "Проекты в работе"}</h1>
 
+          {/* Десктопные фильтры */}
           <div className="filters desktop-only">
             <button className={!showArchive ? "active" : ""} onClick={() => setShowArchive(false)}>
               Активные
@@ -129,27 +149,62 @@ export default function Dashboard({ onLogout }: Props) {
             </button>
           </div>
 
-          <div className="mobile-only" ref={filterRef}>
-            <button className="filter-icon-btn" onClick={() => setFilterOpen((prev) => !prev)}>
-              <img src="/filter.png" alt="Фильтр" />
-            </button>
+          {/* Мобильные: кнопка сортировки + кнопка фильтра */}
+          <div className="mobile-controls mobile-only">
 
-            {filterOpen && (
-              <div className="filter-dropdown">
-                <button
-                  className={!showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(false); setFilterOpen(false); }}
-                >
-                  Активные
-                </button>
-                <button
-                  className={showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(true); setFilterOpen(false); }}
-                >
-                  Архив
-                </button>
-              </div>
-            )}
+            {/* Сортировка */}
+            <div className="mobile-only" ref={sortRef}>
+              <button
+                className="filter-icon-btn"
+                onClick={() => { setSortOpen(prev => !prev); setFilterOpen(false); }}
+              >
+                <img src="/sort.png" alt="Сортировка" />
+              </button>
+
+              {sortOpen && (
+                <div className="filter-dropdown sort-dropdown">
+                  {(["name", "startDate", "endDate"] as SortField[]).map(field => (
+                    <button
+                      key={field}
+                      className={sortField === field ? "active" : ""}
+                      onClick={() => handleMobileSort(field)}
+                    >
+                      {sortLabels[field]}
+                      {sortField === field && (
+                        <span className="sort-dir">{sortDirection === "asc" ? " ↑" : " ↓"}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Фильтр */}
+            <div className="mobile-only" ref={filterRef}>
+              <button
+                className="filter-icon-btn"
+                onClick={() => { setFilterOpen(prev => !prev); setSortOpen(false); }}
+              >
+                <img src="/filter.png" alt="Фильтр" />
+              </button>
+
+              {filterOpen && (
+                <div className="filter-dropdown">
+                  <button
+                    className={!showArchive ? "active" : ""}
+                    onClick={() => { setShowArchive(false); setFilterOpen(false); }}
+                  >
+                    Активные
+                  </button>
+                  <button
+                    className={showArchive ? "active" : ""}
+                    onClick={() => { setShowArchive(true); setFilterOpen(false); }}
+                  >
+                    Архив
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
