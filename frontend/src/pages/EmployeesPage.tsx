@@ -169,27 +169,48 @@ export default function EmployeesPage({ onLogout }: Props) {
             </button>
           </div>
 
-          <div className="mobile-only" ref={filterRef}>
-            <button className="filter-icon-btn" onClick={() => setFilterOpen((prev) => !prev)}>
-              <img src="/filter.png" alt="Фильтр" />
+          {/* Мобильные: кнопка сортировки + кнопка фильтра */}
+          <div className="mobile-controls mobile-only">
+
+            {/* Сортировка — одна кнопка, переключает направление */}
+            <button
+              className="filter-icon-btn"
+              onClick={() => handleSort("name")}
+              title={sortDirection === "asc" ? "По убыванию" : "По возрастанию"}
+            >
+              <img
+                src="/sort.png"
+                alt="Сортировка"
+                className={`arrow ${sortDirection === "desc" ? "open" : ""}`}
+              />
             </button>
 
-            {filterOpen && (
-              <div className="filter-dropdown">
-                <button
-                  className={!showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(false); setFilterOpen(false); }}
-                >
-                  Активные
-                </button>
-                <button
-                  className={showArchive ? "active" : ""}
-                  onClick={() => { setShowArchive(true); setFilterOpen(false); }}
-                >
-                  Заблокированные
-                </button>
-              </div>
-            )}
+            {/* Фильтр */}
+            <div ref={filterRef} style={{ position: "relative" }}>
+              <button
+                className="filter-icon-btn"
+                onClick={() => setFilterOpen(prev => !prev)}
+              >
+                <img src="/filter.png" alt="Фильтр" />
+              </button>
+
+              {filterOpen && (
+                <div className="filter-dropdown">
+                  <button
+                    className={!showArchive ? "active" : ""}
+                    onClick={() => { setShowArchive(false); setFilterOpen(false); }}
+                  >
+                    Активные
+                  </button>
+                  <button
+                    className={showArchive ? "active" : ""}
+                    onClick={() => { setShowArchive(true); setFilterOpen(false); }}
+                  >
+                    Заблокированные
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -261,7 +282,7 @@ export default function EmployeesPage({ onLogout }: Props) {
               {showArchive ? "Нет заблокированных сотрудников" : "Нет активных сотрудников"}
             </div>
           ) : (
-            filteredEmployees.map(employee => (
+            sortedEmployees.map(employee => (
               <div key={employee.id} className="employee-card">
                 <div className="employee-info">
                   <div className="employee-name">{employee.lastName} {employee.firstName}</div>
