@@ -477,12 +477,24 @@ function ProjectPage({ onLogout }: Props) {
             <div className="meta-dates-mobile mobile-only">
               <span className="meta-date-start">{formatDateDisplay(startDate)}</span>
               <span className="meta-date-sep">—</span>
-              <input
-                type="date"
-                value={endDate}
-                className="meta-date-end-input"
-                onChange={e => { setEndDate(e.target.value); handleDatesUpdate(startDate, e.target.value); }}
-              />
+              {endDate ? (
+                <input
+                  type="date"
+                  value={endDate}
+                  className="meta-date-end-input"
+                  onChange={e => { setEndDate(e.target.value); handleDatesUpdate(startDate, e.target.value); }}
+                />
+              ) : (
+                <label className="meta-date-end-placeholder">
+                  <span>дд.мм.гггг</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    className="meta-date-end-input-hidden"
+                    onChange={e => { setEndDate(e.target.value); handleDatesUpdate(startDate, e.target.value); }}
+                  />
+                </label>
+              )}
             </div>
           </div>
 

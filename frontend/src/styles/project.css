@@ -77,12 +77,49 @@
 }
 
 .meta-date-end-input {
-  padding: 5px 8px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
+  padding: 5px 0;
+  border: none;
+  border-bottom: 1px solid #ddd; /* только нижняя линия вместо обводки */
+  border-radius: 0;
   font-size: 13px;
-  max-width: 130px;
+  color: #333;
+  background: transparent;
+  max-width: 120px;
   margin-bottom: 0;
+  outline: none;
+}
+
+/* убираем лишний отступ у иконки календаря */
+.meta-date-end-input::-webkit-calendar-picker-indicator {
+  margin-left: 2px;
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.meta-date-end-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+}
+
+.meta-date-end-placeholder span {
+  font-size: 13px;
+  color: #aaa; /* серый цвет как у placeholder */
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 2px;
+}
+
+/* скрытый input поверх текста */
+.meta-date-end-input-hidden {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  cursor: pointer;
 }
 
 .project-section {
@@ -255,7 +292,7 @@ input[type="checkbox"] {
 }
 
 .warning {
-  font-size: 12px;
+  font-size: 13px;
   color: #d64545;
 }
 
@@ -496,7 +533,7 @@ input[type="checkbox"] {
   }
 
   .project-header h1 {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   /* Мета на мобильном: ответственный и даты в одну строку */
