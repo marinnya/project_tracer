@@ -14,10 +14,12 @@
   padding: 36px 78px;
 }
 
+/* Заголовок: стрелка + название + статус в одну строку */
 .project-header {
   display: flex;
   align-items: center;
   gap: 16px;
+  margin-bottom: 8px;
 }
 
 .project-header h1 {
@@ -25,9 +27,11 @@
   font-weight: 600;
 }
 
+/* Мета: ответственный + даты */
 .project-meta {
   display: flex;
-  gap: 60px;
+  align-items: center;
+  gap: 40px;
   margin-top: 6px;
   margin-bottom: 32px;
 }
@@ -53,6 +57,31 @@
 }
 
 .date-field input[type="date"] {
+  margin-bottom: 0;
+}
+
+/* Мобильная строка с датами через тире */
+.meta-dates-mobile {
+  display: none;
+}
+
+.meta-date-start {
+  font-size: 13px;
+  color: #888;
+}
+
+.meta-date-sep {
+  font-size: 13px;
+  color: #888;
+  margin: 0 4px;
+}
+
+.meta-date-end-input {
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 13px;
+  max-width: 130px;
   margin-bottom: 0;
 }
 
@@ -264,8 +293,7 @@ input[type="checkbox"] {
   cursor: pointer;
   display: flex;
   align-items: center;
-  left: 20px;
-  position: absolute;
+  flex-shrink: 0;
 }
 
 .back-button img {
@@ -331,6 +359,7 @@ input[type="checkbox"] {
   align-items: center;
   gap: 45px;
   flex-wrap: nowrap;
+  padding-right: 30px;
 }
 
 /* Мобильный блок дефекта — скрыт на десктопе */
@@ -345,7 +374,6 @@ input[type="checkbox"] {
   margin-bottom: 10px;
 }
 
-/* Строка 2: тип + страницы на одной строке */
 .defect-mobile-selects {
   display: flex;
   align-items: center;
@@ -421,7 +449,6 @@ input[type="checkbox"] {
   color: #e53935;
 }
 
-/* Кнопка "показать все" */
 .file-list-toggle {
   background: none;
   border: none;
@@ -460,13 +487,34 @@ input[type="checkbox"] {
   }
 
   .back-button {
-    position: static;
-    margin-top: 0;
-    margin-right: 8px;
+    margin-right: 4px;
   }
 
   .project-header {
-    gap: 12px;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .project-header h1 {
+    font-size: 18px;
+  }
+
+  /* Мета на мобильном: ответственный и даты в одну строку */
+  .project-meta {
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin-bottom: 24px;
+  }
+
+  /* Скрываем десктопные поля дат */
+  .meta-dates {
+    display: none;
+  }
+
+  /* Показываем мобильную строку дат */
+  .meta-dates-mobile {
+    display: flex;
+    align-items: center;
   }
 
   .desktop-only {
@@ -477,30 +525,12 @@ input[type="checkbox"] {
     display: inline-flex;
   }
 
-  /* Мобильный блок дефекта */
   .defect-mobile {
     display: block;
   }
 
-  .project-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .meta-top {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .meta-dates {
-    display: flex;
-    gap: 20px;
-  }
-
-  .date-field input {
-    max-width: 125px;
+  .section-row-defect label {
+    display: none;
   }
 
   .add-defect-btn {
@@ -520,13 +550,6 @@ input[type="checkbox"] {
 
   .project-footer {
     margin-top: 0px;
-  }
-
-  .date-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    align-items: flex-start;
   }
 }
 

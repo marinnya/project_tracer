@@ -68,6 +68,12 @@ const formatDateForInput = (date: string | null) => {
   return new Date(date).toISOString().split("T")[0];
 };
 
+const formatDateDisplay = (date: string) => {
+  if (!date) return "—";
+  const [y, m, d] = date.split("-");
+  return `${d}.${m}.${y}`;
+};
+
 function ProjectPage({ onLogout }: Props) {
   const [completed, setCompleted] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -365,8 +371,6 @@ function ProjectPage({ onLogout }: Props) {
 
       const uploadMeta = buildAllPhotosForUpload();
 
-      // Фаза 1: сохранение черновика (0→10%)
-      // таймер даёт визуальное движение пока идёт handleSave
       const saveTimer = setInterval(() => {
         setUploadProgress(prev => (prev < 9 ? prev + 1 : prev));
       }, 200);
@@ -375,7 +379,6 @@ function ProjectPage({ onLogout }: Props) {
       setUploadProgress(10);
       setUploadLabel("Загрузка на Яндекс.Диск...");
 
-      // Фаза 2: реальный прогресс загрузки на Яндекс через SSE (10→100%)
       await new Promise<void>((resolve, reject) => {
         const baseUrl = (import.meta as { env: Record<string, string> }).env.VITE_API_URL ?? "";
         const token = localStorage.getItem("token") ?? "";
@@ -405,8 +408,6 @@ function ProjectPage({ onLogout }: Props) {
           reject(new Error("Ошибка соединения с сервером"));
         };
 
-        // небольшая задержка чтобы SSE успело зарегистрироваться на бэкенде
-        // до того как придёт первый прогресс
         setTimeout(() => {
           api.post(
             `/projects/${id}/upload`,
@@ -432,26 +433,27 @@ function ProjectPage({ onLogout }: Props) {
       <div className="project-page-bg">
         <div className="project-container">
 
+          {/* Заголовок: стрелка + название + статус */}
           <div className="project-header">
-            <button className="back-button" onClick={() => navigate("/")}><img src="/arrow_back.png" alt="Назад" /></button>
+            <button className="back-button" onClick={() => navigate("/")}>
+              <img src="/arrow_back.png" alt="Назад" />
+            </button>
             <h1>{project.name}</h1>
-            <span className={`status ${project.status === "В работе" ? "in-progress" : "done"} desktop-only`}>
+            <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
               {project.status}
             </span>
           </div>
 
+          {/* Мета: ответственный и даты в одну строку на десктопе,
+              на мобильном — ответственный отдельно, даты отдельно */}
           <div className="project-meta">
-            <div className="meta-top">
-              <span className={`status ${project.status === "В работе" ? "in-progress" : "done"} mobile-only`}>
-                {project.status}
-              </span>
-              <div className="responsible-field">
-                <img src="/responsible.png" alt="Ответственный" />
-                <span>{project.responsible}</span>
-              </div>
+            <div className="responsible-field">
+              <img src="/responsible.png" alt="Ответственный" />
+              <span>{project.responsible}</span>
             </div>
 
-            <div className="meta-dates">
+            {/* Десктоп: две date-field рядом */}
+            <div className="meta-dates desktop-only">
               <div className="date-field">
                 <label>Дата начала</label>
                 <input
@@ -469,6 +471,18 @@ function ProjectPage({ onLogout }: Props) {
                   onChange={e => { setEndDate(e.target.value); handleDatesUpdate(startDate, e.target.value); }}
                 />
               </div>
+            </div>
+
+            {/* Мобильный: дата начала текстом через тире + поле окончания */}
+            <div className="meta-dates-mobile mobile-only">
+              <span className="meta-date-start">{formatDateDisplay(startDate)}</span>
+              <span className="meta-date-sep">—</span>
+              <input
+                type="date"
+                value={endDate}
+                className="meta-date-end-input"
+                onChange={e => { setEndDate(e.target.value); handleDatesUpdate(startDate, e.target.value); }}
+              />
             </div>
           </div>
 
