@@ -98,8 +98,15 @@ export default function Dashboard({ onLogout }: Props) {
     }
   };
 
+  // для таблицы на десктопе тире
   const formatDate = (date: string | null) => {
     if (!date) return "—";
+    return new Date(date).toLocaleDateString("ru-RU");
+  };
+
+  // для карточек на мобильном — текст
+  const formatDateMobile = (date: string | null) => {
+    if (!date) return "не указана";
     return new Date(date).toLocaleDateString("ru-RU");
   };
 
@@ -255,7 +262,7 @@ export default function Dashboard({ onLogout }: Props) {
 
                 <div className="project-info">
                   <div className="project-dates">
-                    {formatDate(project.startDate)} – {formatDate(project.endDate)}
+                    {formatDateMobile(project.startDate)} – {formatDateMobile(project.endDate)}
                   </div>
 
                   <div className="status-actions">
