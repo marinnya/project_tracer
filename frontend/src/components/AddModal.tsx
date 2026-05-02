@@ -61,7 +61,7 @@ export default function AddModal({ onClose, onSave, existingOneCIds }: Props) {
       .finally(() => setIsLoading(false));
   }, [existingOneCIds]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setError("");
 
     if (!selectedOneCId) {
@@ -86,16 +86,23 @@ export default function AddModal({ onClose, onSave, existingOneCIds }: Props) {
       return;
     }
 
-    onSave({
-      firstName: employeeObj.firstName,
-      lastName: employeeObj.lastName,
-      login,
-      password,
-      role: "EMPLOYEE",
-      oneCId: employeeObj.id,
-    });
-
-    onClose();
+    try {
+      await onSave({
+        firstName: employeeObj.firstName,
+        lastName: employeeObj.lastName,
+        login,
+        password,
+        role: "EMPLOYEE",
+        oneCId: employeeObj.id,
+      });
+      // закрываем только если сохранение прошло успешно
+      onClose();
+    } catch (err: unknown) {
+      // показываем ошибку от бэкенда если есть
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(message ?? "Ошибка при добавлении сотрудника");
+    }
   };
 
   return (
