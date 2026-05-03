@@ -156,13 +156,13 @@ export default function Dashboard({ onLogout }: Props) {
             <div className="mobile-only" ref={sortRef}>
               <button
                 className="filter-icon-btn"
-                onClick={() => { setSortOpen(prev => !prev); setFilterOpen(false); }}
+                onClick={(e) => { e.stopPropagation(); setSortOpen(prev => !prev); setFilterOpen(false); }}
               >
                 <img src="/sort.png" alt="Сортировка" />
               </button>
 
               {sortOpen && (
-                <div className="filter-dropdown sort-dropdown">
+                <div className="filter-dropdown sort-dropdown" onClick={(e) => e.stopPropagation()}>
                   {(["name", "startDate", "endDate"] as SortField[]).map(field => (
                     <button
                       key={field}
