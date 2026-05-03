@@ -374,8 +374,8 @@ function ProjectPage({ onLogout }: Props) {
       const uploadMeta = buildAllPhotosForUpload();
 
       const saveTimer = setInterval(() => {
-        setUploadProgress(prev => (prev < 9 ? prev + 1 : prev));
-      }, 200);
+        setUploadProgress(prev => (prev < 15 ? prev + 0.5 : prev));
+      }, 100);
       await handleSave();
       clearInterval(saveTimer);
       setUploadProgress(10);
@@ -397,7 +397,10 @@ function ProjectPage({ onLogout }: Props) {
             return;
           }
 
-          setUploadProgress(data.percent);
+          setUploadProgress(prev => {
+            if (data.percent <= prev) return prev;
+            return prev + (data.percent - prev) * 0.3;
+          });
 
           if (data.done) {
             sse.close();
