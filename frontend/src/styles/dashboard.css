@@ -154,6 +154,8 @@
   cursor: pointer;
   color: #777;
   font-size: 14px;
+  display: flex;
+  gap: 6px;
 }
 
 .mobile-menu button.active {
@@ -171,6 +173,18 @@
   gap: 6px;
   position: relative;
   cursor: pointer;
+}
+
+.mobile-menu button img {
+  filter: grayscale(100%);
+  opacity: 0.5;
+  transition: 0.2s;
+}
+
+/* активный пункт */
+.mobile-menu button.active img {
+  filter: none;
+  opacity: 1;
 }
 
 /*иконки для мобильного меню*/
