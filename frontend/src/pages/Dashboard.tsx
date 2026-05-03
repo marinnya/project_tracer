@@ -34,6 +34,7 @@ export default function Dashboard({ onLogout }: Props) {
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
+  // ref охватывает кнопку + дропдаун — клик внутри не закрывает
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
 
@@ -64,7 +65,7 @@ export default function Dashboard({ onLogout }: Props) {
     }
   };
 
-  // мобильная сортировка: при повторном нажатии меняет направление
+  // при выборе пункта сортировки — меняем сортировку но НЕ закрываем дропдаун
   const handleMobileSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(prev => prev === "asc" ? "desc" : "asc");
@@ -72,7 +73,7 @@ export default function Dashboard({ onLogout }: Props) {
       setSortField(field);
       setSortDirection("asc");
     }
-    setSortOpen(false);
+    // setSortOpen(false) убрали — закрывается только по клику вне
   };
 
   const sortProjects = (list: Project[]) => {
@@ -152,17 +153,17 @@ export default function Dashboard({ onLogout }: Props) {
           {/* Мобильные: кнопка сортировки + кнопка фильтра */}
           <div className="mobile-controls mobile-only">
 
-            {/* Сортировка */}
-            <div className="mobile-only" ref={sortRef}>
+            {/* Сортировка — ref охватывает кнопку И дропдаун */}
+            <div ref={sortRef} style={{ position: "relative" }}>
               <button
                 className="filter-icon-btn"
-                onClick={(e) => { e.stopPropagation(); setSortOpen(prev => !prev); setFilterOpen(false); }}
+                onClick={() => { setSortOpen(prev => !prev); setFilterOpen(false); }}
               >
                 <img src="/sort.png" alt="Сортировка" />
               </button>
 
               {sortOpen && (
-                <div className="filter-dropdown sort-dropdown" onClick={(e) => e.stopPropagation()}>
+                <div className="filter-dropdown sort-dropdown">
                   {(["name", "startDate", "endDate"] as SortField[]).map(field => (
                     <button
                       key={field}
@@ -179,8 +180,8 @@ export default function Dashboard({ onLogout }: Props) {
               )}
             </div>
 
-            {/* Фильтр */}
-            <div className="mobile-only" ref={filterRef}>
+            {/* Фильтр — ref охватывает кнопку И дропдаун */}
+            <div ref={filterRef} style={{ position: "relative" }}>
               <button
                 className="filter-icon-btn"
                 onClick={() => { setFilterOpen(prev => !prev); setSortOpen(false); }}
@@ -205,6 +206,7 @@ export default function Dashboard({ onLogout }: Props) {
                 </div>
               )}
             </div>
+
           </div>
         </div>
 
