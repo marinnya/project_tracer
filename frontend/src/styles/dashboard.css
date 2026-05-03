@@ -75,6 +75,7 @@
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
   padding: 8px;
+  border: 1px solid #dfdfdf;
 }
 
 .user-menu button {
@@ -139,10 +140,12 @@
   background: #fff;
   border-radius: 14px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #dfdfdf;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-width: 180px;
+  z-index: 1;
 }
 
 .mobile-menu button {
@@ -317,7 +320,7 @@
 .filter-dropdown {
   position: absolute;
   top: 40px;
-  right: 0;
+  right: 10px;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
@@ -357,7 +360,7 @@
 
 /* Стрелка направления сортировки */
 .sort-dir {
-  font-size: 12px;
+  font-size: 14px;
   color: #2aa3ff;
   margin-left: 8px;
 }
