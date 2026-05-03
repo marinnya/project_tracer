@@ -101,24 +101,28 @@ function Header({
             {mobileMenuOpen && (
             <div className="mobile-menu">
                 <button
-                    className={isActive("/") ? "active" : ""}
-                    onClick={() => {
-                        navigate("/");
-                        setMobileMenuOpen(false);
-                    }}>
-                    Проекты
+                  className={`mobile-nav-btn ${isActive("/") ? "active" : ""}`}
+                  onClick={() => {
+                    navigate("/");
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <img src="/projects.png" alt="" className="nav-icon" />
+                  Проекты
                 </button>
 
                 {/* Мобильная кнопка "Сотрудники" для админа*/}
                 {currentUser.role === "admin" && (
                     <button
-                        className={isActive("/employees") ? "active" : ""}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            navigate("/employees");
-                            setMobileMenuOpen(false);
-                        }}>
-                        Сотрудники
+                      className={`mobile-nav-btn ${isActive("/employees") ? "active" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate("/employees");
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      <img src="/users.png" alt="" className="nav-icon" />
+                      Сотрудники
                     </button>
                 )}
 

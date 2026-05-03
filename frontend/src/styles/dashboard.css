@@ -173,6 +173,7 @@
   cursor: pointer;
 }
 
+/*иконки для мобильного меню*/
 .logout-btn {
   display: flex;
   align-items: center;
@@ -182,6 +183,30 @@
 .logout-icon {
   width: 16px;
   height: 16px;
+}
+
+.mobile-nav-btn {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #777;
+  width: 100%;
+}
+
+.mobile-nav-btn.active {
+  color: #000;
+  font-weight: 500;
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 /* Стрелка сортировки */
