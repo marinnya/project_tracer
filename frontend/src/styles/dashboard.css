@@ -173,6 +173,17 @@
   cursor: pointer;
 }
 
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logout-icon {
+  width: 16px;
+  height: 16px;
+}
+
 /* Стрелка сортировки */
 .arrow {
   width: 16px;
@@ -454,6 +465,12 @@
 
 .clickable:hover {
   background: #fafafa;
+}
+
+/* архивные — тоже сереют, но не кликаются */
+.projects-table tbody tr:not(.clickable):hover {
+  background: #fafafa;
+  cursor: default;
 }
 
 /* Мобильные карточки проектов */

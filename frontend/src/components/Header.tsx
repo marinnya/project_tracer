@@ -123,10 +123,15 @@ function Header({
                 )}
 
                 {/* Кнопка "Выйти" */}
-                <button onClick={() => {
+                <button
+                  className="logout-btn"
+                  onClick={() => {
                     handleLogout();
                     setMobileMenuOpen(false);
-                }}>Выйти
+                  }}
+                >
+                  <img src="/exit.png" alt="Выйти" className="logout-icon" />
+                  Выйти
                 </button>
             </div>
             )}
@@ -138,7 +143,10 @@ function Header({
         <div className="avatar desktop-only" ref={desktopMenuRef} onClick={() => setDesktopMenuOpen((prev) => !prev)}>{initials}
             {desktopMenuOpen && (
                 <div className="user-menu">
-                    <button onClick={handleLogout}>Выйти</button>
+                    <button className="logout-btn" onClick={handleLogout}>
+                      <img src="/exit.png" alt="Выйти" className="logout-icon" />
+                      Выйти
+                    </button>
                 </div>
             )}
         </div>

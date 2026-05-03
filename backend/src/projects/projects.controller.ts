@@ -196,7 +196,7 @@ export class ProjectsController {
       const photosWithMeta = photos.map(p => {
         let match: { id: number; yandexPath: string | null; filename: string | null } | undefined;
 
-        if (p.section === 'дефекты' && p.defectTypeName) {
+        if (p.section === 'Дефекты' && p.defectTypeName) {
           const found = defectPhotosFlat.find(sp =>
             sp.typeName === p.defectTypeName &&
             sp.originalName === p.originalName &&
@@ -248,7 +248,7 @@ export class ProjectsController {
         );
 
       const sectionPhotosWithPath = photos
-        .filter(p => p.section !== 'дефекты')
+        .filter(p => p.section !== 'Дефекты')
         .map(p => {
           const match = findRenamed(p);
           const filename = match?.filename ?? p.originalName;
@@ -257,7 +257,7 @@ export class ProjectsController {
             defectId: null,
             originalName: p.originalName,
             filename,
-            yandexPath: `${body.projectName}/${p.section ?? 'дефекты'}/${filename}`,
+            yandexPath: `${body.projectName}/${p.section ?? 'Дефекты'}/${filename}`,
             order: p.order,
           };
         });
@@ -265,11 +265,11 @@ export class ProjectsController {
       await this.projectService.savePhotos(projectId, sectionPhotosWithPath);
 
       const defectPhotoUpdates = photos
-        .filter(p => p.section === 'дефекты')
+        .filter(p => p.section === 'Дефекты')
         .flatMap(p => {
           const match = findRenamed(p);
           const filename = match?.filename ?? p.originalName;
-          const yandexPath = `${body.projectName}/${p.section ?? 'дефекты'}/${filename}`;
+          const yandexPath = `${body.projectName}/${p.section ?? 'Дефекты'}/${filename}`;
           const meta = photosWithMeta.find(pm =>
             pm.originalName === p.originalName &&
             pm.section === p.section &&

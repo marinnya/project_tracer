@@ -263,7 +263,7 @@ export class ProjectsService {
     await this.createFolder(projectName);
 
     const folders = new Set<string>();
-    photos.forEach(p => folders.add(p.section ?? 'дефекты'));
+    photos.forEach(p => folders.add(p.section ?? 'Дефекты'));
     for (const folder of folders) {
       await this.createFolder(`${projectName}/${folder}`);
     }
@@ -303,7 +303,7 @@ export class ProjectsService {
       await Promise.all(
         batch.map(file => {
           const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-          const fileSection = file.section ?? 'дефекты';
+          const fileSection = file.section ?? 'Дефекты';
           const fileDefectTypeName = file.defectTypeName;
           const fileOrder = file.order ?? i + 1;
           const key = `${originalName}|||${fileSection}|||${fileDefectTypeName ?? ''}|||${fileOrder}`;
