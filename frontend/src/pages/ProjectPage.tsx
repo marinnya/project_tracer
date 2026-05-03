@@ -373,14 +373,17 @@ function ProjectPage({ onLogout }: Props) {
 
       const uploadMeta = buildAllPhotosForUpload();
 
+      // Фаза 1: сохранение (0→10%) — равномерный таймер пока идёт handleSave
       const saveTimer = setInterval(() => {
-        setUploadProgress(prev => (prev < 15 ? prev + 0.5 : prev));
-      }, 100);
+        setUploadProgress(prev => (prev < 9 ? prev + 1 : prev));
+      }, 150);
       await handleSave();
       clearInterval(saveTimer);
       setUploadProgress(10);
       setUploadLabel("Загрузка на Яндекс.Диск...");
 
+      // Фаза 2: реальный прогресс через SSE (10→100%)
+      // бэкенд шлёт percent после каждого батча — ставим напрямую без сглаживания
       await new Promise<void>((resolve, reject) => {
         const baseUrl = (import.meta as { env: Record<string, string> }).env.VITE_API_URL ?? "";
         const token = localStorage.getItem("token") ?? "";
@@ -397,10 +400,8 @@ function ProjectPage({ onLogout }: Props) {
             return;
           }
 
-          setUploadProgress(prev => {
-            if (data.percent <= prev) return prev;
-            return prev + (data.percent - prev) * 0.3;
-          });
+          // ставим прогресс напрямую — он растёт ровно по батчам
+          setUploadProgress(data.percent);
 
           if (data.done) {
             sse.close();
@@ -413,6 +414,7 @@ function ProjectPage({ onLogout }: Props) {
           reject(new Error("Ошибка соединения с сервером"));
         };
 
+        // небольшая задержка чтобы SSE успело зарегистрироваться на бэкенде
         setTimeout(() => {
           api.post(
             `/projects/${id}/upload`,
@@ -424,7 +426,7 @@ function ProjectPage({ onLogout }: Props) {
         }, 300);
       });
 
-      setModalMessage("Данные успешно записаны! Проект помещен в архив.")
+      setModalMessage("Данные успешно записаны! Проект помещен в архив.");
       setShouldRedirect(true);
       setShowModal(true);
     } catch (e: unknown) {
@@ -451,8 +453,7 @@ function ProjectPage({ onLogout }: Props) {
             </span>
           </div>
 
-          {/* Мета: ответственный и даты в одну строку на десктопе,
-              на мобильном — ответственный отдельно, даты отдельно */}
+          {/* Мета: ответственный и даты */}
           <div className="project-meta">
             <div className="responsible-field">
               <img src="/responsible.png" alt="Ответственный" />
@@ -480,7 +481,7 @@ function ProjectPage({ onLogout }: Props) {
               </div>
             </div>
 
-            {/* Мобильный: дата начала текстом через тире + поле окончания */}
+            {/* Мобильный: дата начала текстом + поле окончания */}
             <div className="meta-dates-mobile mobile-only">
               <span className="meta-date-start">{formatDateDisplay(startDate)}</span>
               <span className="meta-date-sep">—</span>
@@ -532,7 +533,7 @@ function ProjectPage({ onLogout }: Props) {
 
           {isUploading && (
             <div className="progress-wrapper">
-              <p className="progress-label">{uploadLabel} {uploadProgress}%</p>
+              <p className="progress-label">{uploadLabel} {Math.round(uploadProgress)}%</p>
               <div className="progress-bar">
                 <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
               </div>
@@ -549,8 +550,8 @@ function ProjectPage({ onLogout }: Props) {
               <button
                 className="btn secondary"
                 onClick={async () => {
-                  try { 
-                    await handleSave(); 
+                  try {
+                    await handleSave();
                     setModalMessage("Данные успешно сохранены!");
                     setShouldRedirect(false);
                     setShowModal(true);
@@ -570,15 +571,15 @@ function ProjectPage({ onLogout }: Props) {
             </div>
 
             {showModal && (
-              <SuccessModal message={modalMessage} 
-                onClose={() => { 
-                setShowModal(false);
-                
-                if (shouldRedirect) {
-                  setShouldRedirect(false);
-                  navigate("/");
-                }
-                }} 
+              <SuccessModal
+                message={modalMessage}
+                onClose={() => {
+                  setShowModal(false);
+                  if (shouldRedirect) {
+                    setShouldRedirect(false);
+                    navigate("/");
+                  }
+                }}
               />
             )}
           </div>
