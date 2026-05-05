@@ -16,7 +16,7 @@ type Props = {
   onRemoveSaved: (id: number) => void;
 };
 
-const pageOptions = Array.from({ length: 11 }, (_, i) => i);
+const pageOptions = Array.from({ length: 301 }, (_, i) => i);
 
 function ProjectSection({
   title,
@@ -108,8 +108,8 @@ function ProjectSection({
 
       <div className="file-row" onClick={() => inputRef.current?.click()}>
         <img src="/clip.png" alt="attach" />
-        <span className="desktop-only">Выберите файлы (максимальный размер до 10 Мб)</span>
-        <span className="mobile-only">Выберите файлы (до 10 Мб)</span>
+        <span className="desktop-only">Выберите файлы (максимальный размер до 15 Мб)</span>
+        <span className="mobile-only">Выберите файлы (до 15 Мб)</span>
       </div>
 
       {allFiles.length > 0 && (

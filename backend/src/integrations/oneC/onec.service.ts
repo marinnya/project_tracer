@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import axios from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
+import axios from 'axios';
 
-// типы данных из 1С
 export type OneCProject = {
   id: string;
   name: string;
@@ -18,165 +17,129 @@ export type OneCEmployee = {
   lastName: string;
 };
 
+export type OneCDefectType = {
+  id: string;
+  name: string;
+};
+
 @Injectable()
 export class OneCService {
   private readonly logger = new Logger(OneCService.name);
-  private readonly baseUrl = process.env.ONEC_API_URL;
-  private readonly token = process.env.ONEC_TOKEN;
 
   constructor(private readonly prisma: PrismaService) {}
 
-  private getHeaders() {
-    return { Authorization: `Bearer ${this.token}` };
-  }
+  async syncAndReturnData(
+    projects: OneCProject[],
+    employees: OneCEmployee[],
+    defectTypes: OneCDefectType[],
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Синхронизируем типы дефектов
+      for (const dt of defectTypes) {
+        await tx.defectType.upsert({
+          where: { oneCId: dt.id },
+          update: { name: dt.name },
+          create: { oneCId: dt.id, name: dt.name },
+        });
+      }
 
-  /**
-   * Сохраняет данные из 1С: проекты и сотрудников
-   * Возвращает обновлённые проекты для сверки с 1С
-   */
-  async syncFromOneC(projects: OneCProject[], employees: OneCEmployee[]) {
-    this.logger.log('Начата синхронизация данных из 1С');
-
-    // Сначала синхронизируем сотрудников
-    for (const emp of employees) {
-      try {
-        // --- проверка id сотрудника ---
-        if (!emp?.id || typeof emp.id !== 'string' || emp.id.trim() === '' || emp.id === 'emp1') {
-          this.logger.warn('Скип некорректного сотрудника: ' + JSON.stringify(emp));
-          continue;
-        }
-
-        // --- проверка имени ---
-        if (!emp.firstName || !emp.lastName) {
-          this.logger.warn('Скип сотрудника без имени: ' + JSON.stringify(emp));
-          continue;
-        }
-
-        await this.prisma.user.upsert({
+      // 2. Синхронизируем сотрудников (User)
+      for (const emp of employees) {
+        await tx.user.upsert({
           where: { oneCId: emp.id },
           update: { firstName: emp.firstName, lastName: emp.lastName },
           create: {
             oneCId: emp.id,
             firstName: emp.firstName,
             lastName: emp.lastName,
-            login: `onec_${emp.id}`, // временный уникальный логин
-            passwordHash: '',
+            login: `onec_${emp.id}`,
+            passwordHash: 'external_auth',
             role: 'EMPLOYEE',
           },
         });
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
-        this.logger.error(`Ошибка синхронизации сотрудника ${emp.id}: ${message}`);
       }
-    }
 
-    // Синхронизация проектов
-    for (const project of projects) {
-      try {
-        // --- проверка id проекта ---
-        if (!project?.id || typeof project.id !== 'string' || project.id.trim() === '') {
-          this.logger.warn('Скип проекта с некорректным id: ' + JSON.stringify(project));
-          continue;
-        }
-
-        const responsibleUser = project.responsibleId
-          ? await this.prisma.user.findUnique({
-              where: { oneCId: project.responsibleId },
-            })
+      // 3. Синхронизируем проекты
+      for (const p of projects) {
+        const user = p.responsibleId 
+          ? await tx.user.findUnique({ where: { oneCId: p.responsibleId } }) 
           : null;
 
-        await this.prisma.project.upsert({
-          where: { oneCId: project.id },
+        await tx.project.upsert({
+          where: { oneCId: p.id },
           update: {
-            name: project.name ?? '',
-            responsible: project.responsible ?? '',
-            oneCResponsibleId: project.responsibleId ?? null,
-            responsibleId: responsibleUser?.id ?? null,
-            startDate: project.startDate ? new Date(project.startDate) : null,
-            endDate: project.endDate ? new Date(project.endDate) : null,
+            name: p.name,
+            oneCResponsibleId: p.responsibleId,
+            responsibleId: user?.id || null,
+            startDate: p.startDate ? new Date(p.startDate) : null,
+            endDate: p.endDate ? new Date(p.endDate) : null,
           },
           create: {
-            oneCId: project.id,
-            name: project.name ?? '',
-            responsible: project.responsible ?? '',
-            oneCResponsibleId: project.responsibleId ?? null,
-            responsibleId: responsibleUser?.id ?? null,
-            startDate: project.startDate ? new Date(project.startDate) : null,
-            endDate: project.endDate ? new Date(project.endDate) : null,
-            status: 'В работе',
+            oneCId: p.id,
+            name: p.name,
+            oneCResponsibleId: p.responsibleId,
+            responsibleId: user?.id || null,
+            startDate: p.startDate ? new Date(p.startDate) : null,
+            endDate: p.endDate ? new Date(p.endDate) : null,
           },
         });
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
-        this.logger.error(`Ошибка синхронизации проекта ${project.id}: ${message}`);
       }
-    }
-
-    // Возвращаем актуальные проекты для сверки с 1С
-    const oneCIds = projects
-      .filter(p => p?.id && typeof p.id === 'string' && p.id.trim() !== '')
-      .map((p) => p.id);
-
-    const updatedProjects = await this.prisma.project.findMany({
-      where: { oneCId: { in: oneCIds } },
     });
 
-    return updatedProjects;
-  }
-
-  /**
-   * Получить список сотрудников для селекта
-   */
-    async getEmployeesForSelect(): Promise<OneCEmployee[]> {
-    const users = await this.prisma.user.findMany({
-      where: { oneCId: { not: null } },
+    return this.prisma.project.findMany({
+      include: { defects: true }
     });
-
-    return users.map((u) => ({
-      id: u.oneCId!,          // UUID из 1C
-      //neCId: u.oneCId!, // для связи с проектами
-      firstName: u.firstName,
-      lastName: u.lastName,
-    }));
   }
 
-  /**
-   * Отправка обновлённых дат проекта в 1С
-   */
-  async sendProjectUpdate(data: {
-    oneCId: string;
-    startDate: Date | null;
-    endDate: Date | null;
-    folderUrl: string | null;
-  }) {
-    if (!data.oneCId) {
-      this.logger.warn('Пропущена отправка в 1С: нет oneCId');
+  async getDefectTypesForSelect() {
+    return this.prisma.defectType.findMany({ orderBy: { name: 'asc' } });
+  }
+
+  async getEmployeesForSelect() {
+    const users = await this.prisma.user.findMany({ where: { oneCId: { not: null } } });
+    return users.map(u => ({ id: u.oneCId, name: `${u.lastName} ${u.firstName}` }));
+  }
+
+  async sendProjectUpdate(projectId: number) {
+    const endpoint = process.env.ONEC_OUTGOING_URL;
+    if (!endpoint) {
+      this.logger.warn('ONEC_OUTGOING_URL не задан, отправка данных в 1С пропущена');
       return;
     }
 
-    if (!this.baseUrl) {
-      this.logger.error('ONEC_API_URL не задан');
-      return;
-    }
-
-    this.logger.log(`Отправка проекта ${data.oneCId} в 1С`);
-
-    try {
-      const response = await axios.post(
-        `${this.baseUrl}/project/update`,
-        {
-          id: data.oneCId,
-          startDate: data.startDate ? data.startDate.toISOString() : null,
-          endDate: data.endDate ? data.endDate.toISOString() : null,
-          folderUrl: data.folderUrl,
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        defects: {
+          select: {
+            id: true,
+            typeId: true,
+            pages: true,
+          },
         },
-        { headers: this.getHeaders() },
-      );
+      },
+    });
 
-      this.logger.log(`1С ответ: ${JSON.stringify(response.data)}`);
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      this.logger.error(`Ошибка отправки в 1С: ${message}`);
+    if (!project) {
+      this.logger.warn(`Проект ${projectId} не найден, отправка в 1С пропущена`);
+      return;
     }
+
+    await axios.post(
+      endpoint,
+      {
+        projectId: project.oneCId ?? String(project.id),
+        status: project.status,
+        archivedAt: project.archivedAt,
+        defects: project.defects,
+      },
+      {
+        headers: {
+          Authorization: process.env.ONEC_OUTGOING_TOKEN
+            ? `Bearer ${process.env.ONEC_OUTGOING_TOKEN}`
+            : undefined,
+        },
+      },
+    );
   }
 }

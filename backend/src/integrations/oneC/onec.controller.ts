@@ -1,5 +1,6 @@
-import { Controller, Post, Body, Logger } from '@nestjs/common';
-import { OneCService, OneCProject, OneCEmployee } from './onec.service';
+import { Controller, Post, Get, Body, Logger, UseGuards } from '@nestjs/common';
+import { OneCService, OneCProject, OneCEmployee, OneCDefectType } from './onec.service';
+import { OneCAuthGuard } from './onec-auth.guard';
 
 @Controller('onec')
 export class OneCController {
@@ -7,19 +8,36 @@ export class OneCController {
 
   constructor(private readonly oneCService: OneCService) {}
 
-  /**
-   * 1С присылает данные проектов и сотрудников
-   */
   @Post('sync')
-  async syncFromOneC(@Body() body: { projects: OneCProject[]; employees: OneCEmployee[] }) {
-    this.logger.log('Получены данные от 1С');
-    this.logger.log('Получены проекты:', JSON.stringify(body.projects, null, 2));
-    this.logger.log('Получены сотрудники:', JSON.stringify(body.employees, null, 2));
+  @UseGuards(OneCAuthGuard)
+  async syncFromOneC(
+    @Body() body: { 
+      projects: OneCProject[]; 
+      employees: OneCEmployee[]; 
+      defectTypes: OneCDefectType[] 
+    },
+  ) {
+    this.logger.log(`Синхронизация инициирована 1С. Получено проектов: ${body.projects?.length}`);
 
-    const updatedProjects = await this.oneCService.syncFromOneC(body.projects, body.employees);
+    const updatedProjects = await this.oneCService.syncAndReturnData(
+      body.projects || [],
+      body.employees || [],
+      body.defectTypes || [],
+    );
 
-    this.logger.log('Синхронизация завершена');
-    return { updatedProjects }; // возвращаем обратно 1С
+    return { 
+      success: true, 
+      projects: updatedProjects 
+    };
   }
 
+  @Get('defect-types')
+  async getDefectTypes() {
+    return this.oneCService.getDefectTypesForSelect();
+  }
+
+  @Get('employees')
+  async getEmployees() {
+    return this.oneCService.getEmployeesForSelect();
+  }
 }

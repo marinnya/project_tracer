@@ -4,16 +4,19 @@ import "../styles/spinner.css";
 import ProjectSection from "../components/ProjectSection";
 import ProjectDefectSection from "../components/ProjectDefectSection";
 import Header from "../components/Header";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import SuccessModal from "../components/SuccessModal";
-import { useParams } from "react-router-dom";
 import api from "../utils/api";
 
+// Обновленный тип проекта под новую схему Prisma
 type Project = {
   id: number;
   name: string;
   status: string;
-  responsible: string;
+  responsibleUser?: {
+    firstName: string;
+    lastName: string;
+  } | null;
   startDate: string;
   endDate: string;
 };
@@ -43,7 +46,6 @@ type SavedPhoto = {
 type Defect = {
   id: number;
   typeId: number | "";
-  typeName: string;
   pages: number | "";
   files: File[];
 };
@@ -60,6 +62,7 @@ const SECTIONS = [
   "Лист для фиксации отклонений в вертикальной плоскости",
   "Лист для фиксации момента затяжки болтовых и анкерных соединений",
   "Лист для эскизов",
+  "Протоколы испытаний",
   "Дополнительная информация",
 ] as const;
 
@@ -95,13 +98,14 @@ function ProjectPage({ onLogout }: Props) {
   const [savedPhotos, setSavedPhotos] = useState<SavedPhoto[]>([]);
   const [savedDefects, setSavedDefects] = useState<SavedDefect[]>([]);
   const [deletedPhotoIds, setDeletedPhotoIds] = useState<number[]>([]);
+  const [defectTypes, setDefectTypes] = useState<{ id: number; name: string }[]>([]);
 
   const [sections, setSections] = useState<Record<string, SectionState>>(
     Object.fromEntries(SECTIONS.map(s => [s, { files: [], pages: 0 }]))
   );
 
   const [defects, setDefects] = useState<Defect[]>([
-    { id: -Date.now(), typeId: "", typeName: "", pages: "", files: [] }
+    { id: -Date.now(), typeId: "", pages: "", files: [] }
   ]);
 
   useEffect(() => {
@@ -142,7 +146,6 @@ function ProjectPage({ onLogout }: Props) {
           setDefects(loaded.map(d => ({
             id: d.id,
             typeId: d.typeId,
-            typeName: d.typeName,
             pages: d.pages,
             files: [],
           })));
@@ -150,7 +153,11 @@ function ProjectPage({ onLogout }: Props) {
       })
       .catch(() => setSavedDefects([]));
 
-    Promise.all([projectReq, photosReq, draftReq, defectsReq])
+    const defectTypesReq = api.get("/onec/defect-types")
+      .then(res => setDefectTypes(res.data))
+      .catch(() => setDefectTypes([]));
+
+    Promise.all([projectReq, photosReq, draftReq, defectsReq, defectTypesReq])
       .finally(() => setIsLoading(false));
   }, [id]);
 
@@ -224,7 +231,13 @@ function ProjectPage({ onLogout }: Props) {
   };
 
   const buildAllPhotosForUpload = () => {
-    const meta: { originalName: string; section: string | null; defectTypeName?: string; order: number }[] = [];
+    const meta: {
+      originalName: string;
+      section: string | null;
+      defectId?: number;
+      defectTypeName?: string;
+      order: number;
+    }[] = [];
 
     for (const title of SECTIONS) {
       const saved = savedPhotos.filter(p => p.section === title).sort((a, b) => a.order - b.order);
@@ -235,15 +248,29 @@ function ProjectPage({ onLogout }: Props) {
     }
 
     for (const d of defects) {
-      if (!d.typeName) continue;
+      if (!d.typeId) continue;
+      const selectedTypeName = defectTypes.find(t => t.id === d.typeId)?.name ?? "";
       const savedDef = savedDefects.find(sd => sd.id === d.id);
       const savedDefPhotos = savedDef?.photos.sort((a, b) => a.order - b.order) ?? [];
+      const defectTypeName = savedDef?.typeName ?? selectedTypeName;
 
       savedDefPhotos.forEach(p => {
-        meta.push({ originalName: p.originalName, section: 'дефекты', defectTypeName: d.typeName, order: p.order });
+        meta.push({
+          originalName: p.originalName,
+          section: 'Дефекты',
+          defectId: d.id > 0 ? d.id : undefined,
+          defectTypeName,
+          order: p.order
+        });
       });
       d.files.forEach((file, i) => {
-        meta.push({ originalName: file.name, section: 'дефекты', defectTypeName: d.typeName, order: savedDefPhotos.length + i + 1 });
+        meta.push({
+          originalName: file.name,
+          section: 'Дефекты',
+          defectId: d.id > 0 ? d.id : undefined,
+          defectTypeName,
+          order: savedDefPhotos.length + i + 1
+        });
       });
     }
 
@@ -255,60 +282,120 @@ function ProjectPage({ onLogout }: Props) {
     setError(null);
 
     try {
-      const formData = new FormData();
-
+      const saveMetaFormData = new FormData();
       const sectionsState = Object.fromEntries(
         SECTIONS.map(title => [title, { pages: sections[title].pages }])
       );
-      formData.append("sections", JSON.stringify(sectionsState));
+      saveMetaFormData.append("sections", JSON.stringify(sectionsState));
+      saveMetaFormData.append("fileToSection", JSON.stringify({}));
+      saveMetaFormData.append("fileKeys", JSON.stringify([]));
+      saveMetaFormData.append("sectionPhotos", JSON.stringify([]));
 
-      const fileToSection: Record<string, string> = {};
-      const fileKeys: string[] = [];
-      let globalIndex = 0;
-
-      for (const title of SECTIONS) {
-        sections[title].files.forEach(file => {
-          const clientKey = buildClientKey(file.name, globalIndex++);
-          formData.append("files", file);
-          fileKeys.push(clientKey);
-          fileToSection[clientKey] = title;
-        });
-      }
-
-      const sectionFilesCount = fileKeys.length;
-
-      for (const d of defects) {
-        d.files.forEach(file => {
-          const clientKey = buildClientKey(file.name, globalIndex++);
-          formData.append("files", file);
-          fileKeys.push(clientKey);
-          fileToSection[clientKey] = `__defect__${d.typeName}`;
-        });
-      }
-
-      formData.append("fileToSection", JSON.stringify(fileToSection));
-      formData.append("fileKeys", JSON.stringify(fileKeys));
-      formData.append("sectionPhotos", JSON.stringify(buildSectionPhotosMeta(fileKeys, 0)));
-
-      let defectKeyIndex = sectionFilesCount;
       const defectsData = defects.map(d => {
-        const savedDef = savedDefects.find(sd => sd.id === d.id);
-        const savedCount = savedDef?.photos.length ?? 0;
         return {
           id: d.id > 0 ? d.id : undefined,
           typeId: d.typeId,
-          typeName: d.typeName,
           pages: d.pages,
-          newPhotos: d.files.map((file, i) => {
-            const clientKey = fileKeys[defectKeyIndex++];
-            return { originalName: file.name, clientKey, order: savedCount + i + 1 };
-          }),
+          newPhotos: [],
         };
       });
-      formData.append("defects", JSON.stringify(defectsData));
-      formData.append("deletedPhotos", JSON.stringify(deletedPhotoIds));
+      saveMetaFormData.append("defects", JSON.stringify(defectsData));
+      saveMetaFormData.append("deletedPhotos", JSON.stringify(deletedPhotoIds));
 
-      await api.patch(`/projects/${id}/save`, formData);
+      const saveRes = await api.patch(`/projects/${id}/save`, saveMetaFormData);
+      const defectIdMap = (saveRes.data?.defectIdMap ?? {}) as Record<string, number>;
+
+      const resolvedDefectId = (defectId: number) => (
+        defectId > 0 ? defectId : (defectIdMap[String(defectId)] ?? defectId)
+      );
+
+      type PendingUpload = {
+        file: File;
+        clientKey: string;
+        subfolder: string;
+        sectionPhoto?: { section: string; originalName: string; clientKey: string; order: number };
+        defectPhoto?: { defectId: number; originalName: string; clientKey: string; order: number };
+      };
+
+      const pendingUploads: PendingUpload[] = [];
+      let globalIndex = 0;
+
+      for (const title of SECTIONS) {
+        const saved = savedPhotos
+          .filter(p => p.section === title)
+          .sort((a, b) => a.order - b.order);
+        sections[title].files.forEach((file, i) => {
+          const clientKey = buildClientKey(file.name, globalIndex++);
+          pendingUploads.push({
+            file,
+            clientKey,
+            subfolder: title,
+            sectionPhoto: {
+              section: title,
+              originalName: file.name,
+              clientKey,
+              order: saved.length + i + 1,
+            },
+          });
+        });
+      }
+
+      for (const d of defects) {
+        const savedDef = savedDefects.find(sd => sd.id === d.id);
+        const savedCount = savedDef?.photos.length ?? 0;
+        const defectId = resolvedDefectId(d.id);
+        d.files.forEach((file, i) => {
+          const clientKey = buildClientKey(file.name, globalIndex++);
+          pendingUploads.push({
+            file,
+            clientKey,
+            subfolder: `__defect__id__${defectId}`,
+            defectPhoto: {
+              defectId,
+              originalName: file.name,
+              clientKey,
+              order: savedCount + i + 1,
+            },
+          });
+        });
+      }
+
+      const CHUNK_SIZE = 40;
+      const uploadChunkWithRetry = async (chunk: PendingUpload[], retries = 3) => {
+        const formData = new FormData();
+        const fileToSection: Record<string, string> = {};
+        const fileKeys: string[] = [];
+        const sectionPhotos: { section: string; originalName: string; clientKey: string; order: number }[] = [];
+        const defectPhotos: { defectId: number; originalName: string; clientKey: string; order: number }[] = [];
+
+        for (const item of chunk) {
+          formData.append("files", item.file);
+          fileKeys.push(item.clientKey);
+          fileToSection[item.clientKey] = item.subfolder;
+          if (item.sectionPhoto) sectionPhotos.push(item.sectionPhoto);
+          if (item.defectPhoto) defectPhotos.push(item.defectPhoto);
+        }
+
+        formData.append("fileToSection", JSON.stringify(fileToSection));
+        formData.append("fileKeys", JSON.stringify(fileKeys));
+        formData.append("sectionPhotos", JSON.stringify(sectionPhotos));
+        formData.append("defectPhotos", JSON.stringify(defectPhotos));
+
+        for (let attempt = 1; attempt <= retries; attempt++) {
+          try {
+            await api.patch(`/projects/${id}/save-files`, formData);
+            return;
+          } catch (e) {
+            if (attempt === retries) throw e;
+            await new Promise(resolve => setTimeout(resolve, attempt * 500));
+          }
+        }
+      };
+
+      for (let i = 0; i < pendingUploads.length; i += CHUNK_SIZE) {
+        const chunk = pendingUploads.slice(i, i + CHUNK_SIZE);
+        await uploadChunkWithRetry(chunk);
+      }
 
       const [photosRes, defectsRes] = await Promise.all([
         api.get(`/projects/${id}/photos`),
@@ -321,8 +408,8 @@ function ProjectPage({ onLogout }: Props) {
 
       setDefects(prev => prev.map(d => {
         if (d.id > 0) return { ...d, files: [] };
-        const found = loadedDefects.find(sd => sd.typeName === d.typeName);
-        return found ? { ...d, id: found.id, files: [] } : { ...d, files: [] };
+        const mappedId = defectIdMap[String(d.id)];
+        return mappedId ? { ...d, id: mappedId, files: [] } : { ...d, files: [] };
       }));
 
       setSections(prev =>
@@ -373,7 +460,6 @@ function ProjectPage({ onLogout }: Props) {
 
       const uploadMeta = buildAllPhotosForUpload();
 
-      // Фаза 1: сохранение (0→10%) — равномерный таймер пока идёт handleSave
       const saveTimer = setInterval(() => {
         setUploadProgress(prev => (prev < 9 ? prev + 1 : prev));
       }, 150);
@@ -382,10 +468,8 @@ function ProjectPage({ onLogout }: Props) {
       setUploadProgress(10);
       setUploadLabel("Загрузка на Яндекс.Диск...");
 
-      // Фаза 2: реальный прогресс через SSE (10→100%)
-      // бэкенд шлёт percent после каждого батча — ставим напрямую без сглаживания
       await new Promise<void>((resolve, reject) => {
-        const baseUrl = (import.meta as { env: Record<string, string> }).env.VITE_API_URL ?? "";
+        const baseUrl = (import.meta as any).env.VITE_API_URL ?? "";
         const token = localStorage.getItem("token") ?? "";
         const sse = new EventSource(
           `${baseUrl}/projects/${id}/upload-progress?token=${token}`
@@ -400,7 +484,6 @@ function ProjectPage({ onLogout }: Props) {
             return;
           }
 
-          // ставим прогресс напрямую — он растёт ровно по батчам
           setUploadProgress(data.percent);
 
           if (data.done) {
@@ -414,7 +497,6 @@ function ProjectPage({ onLogout }: Props) {
           reject(new Error("Ошибка соединения с сервером"));
         };
 
-        // небольшая задержка чтобы SSE успело зарегистрироваться на бэкенде
         setTimeout(() => {
           api.post(
             `/projects/${id}/upload`,
@@ -442,7 +524,6 @@ function ProjectPage({ onLogout }: Props) {
       <div className="project-page-bg">
         <div className="project-container">
 
-          {/* Заголовок: стрелка + название + статус */}
           <div className="project-header">
             <button className="back-button" onClick={() => navigate("/")}>
               <img src="/arrow_back.png" alt="Назад" />
@@ -453,14 +534,16 @@ function ProjectPage({ onLogout }: Props) {
             </span>
           </div>
 
-          {/* Мета: ответственный и даты */}
           <div className="project-meta">
             <div className="responsible-field">
               <img src="/responsible.png" alt="Ответственный" />
-              <span>{project.responsible}</span>
+              <span>
+                {project.responsibleUser 
+                  ? `${project.responsibleUser.firstName} ${project.responsibleUser.lastName}`.trim() || "Имя не указано"
+                  : "Сотрудник не найден"}
+              </span>
             </div>
 
-            {/* Десктоп: две date-field рядом */}
             <div className="meta-dates desktop-only">
               <div className="date-field">
                 <label>Дата начала</label>
@@ -481,7 +564,6 @@ function ProjectPage({ onLogout }: Props) {
               </div>
             </div>
 
-            {/* Мобильный: дата начала текстом + поле окончания */}
             <div className="meta-dates-mobile mobile-only">
               <span className="meta-date-start">{formatDateDisplay(startDate)}</span>
               <span className="meta-date-sep">—</span>

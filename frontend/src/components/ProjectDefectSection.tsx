@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import api from "../utils/api";
 
 type DefectType = {
   id: number;
@@ -8,7 +9,6 @@ type DefectType = {
 type Defect = {
   id: number;
   typeId: number | "";
-  typeName: string;
   pages: number | "";
   files: File[];
 };
@@ -36,15 +36,7 @@ type Props = {
   onRemoveSavedPhoto: (id: number) => void;
 };
 
-const defectTypes: DefectType[] = [
-  { id: 1, name: "Тип 1" },
-  { id: 2, name: "Тип 2" },
-  { id: 3, name: "Тип 3" },
-  { id: 4, name: "Коррозия" },
-  { id: 5, name: "Трещина" },
-];
-
-const pageOptions = Array.from({ length: 11 }, (_, i) => i);
+const pageOptions = Array.from({ length: 301 }, (_, i) => i);
 
 function ProjectDefectSection({
   title,
@@ -54,6 +46,14 @@ function ProjectDefectSection({
   onRemoveSavedPhoto,
 }: Props) {
   const [expandedMap, setExpandedMap] = useState<Record<number, boolean>>({});
+  // загружаем типы дефектов из БД (синхронизированы из 1С)
+  const [defectTypes, setDefectTypes] = useState<DefectType[]>([]);
+
+  useEffect(() => {
+    api.get("/onec/defect-types")
+      .then(res => setDefectTypes(res.data))
+      .catch(() => setDefectTypes([]));
+  }, []);
 
   const updateDefect = (id: number, patch: Partial<Omit<Defect, "id">>) => {
     onDefectsChange(defects.map(d => (d.id === id ? { ...d, ...patch } : d)));
@@ -67,7 +67,7 @@ function ProjectDefectSection({
     }
     onDefectsChange([
       ...defects,
-      { id: -Date.now(), typeId: "", typeName: "", pages: "", files: [] },
+      { id: -Date.now(), typeId: "", pages: "", files: [] },
     ]);
   };
 
@@ -136,7 +136,7 @@ function ProjectDefectSection({
 
         return (
           <div key={defect.id} className="defect-card">
-            {/* Десктоп: всё в одну строку */}
+            {/* Десктоп */}
             <div className="defect-row desktop-only">
               <span className="defect-number">№{index + 1}</span>
 
@@ -145,10 +145,8 @@ function ProjectDefectSection({
                 <select
                   value={defect.typeId}
                   onChange={e => {
-                    const selected = defectTypes.find(d => d.id === Number(e.target.value));
                     updateDefect(defect.id, {
                       typeId: Number(e.target.value) || "",
-                      typeName: selected?.name ?? "",
                     });
                   }}
                 >
@@ -186,7 +184,7 @@ function ProjectDefectSection({
 
               <label htmlFor={`defect-upload-desktop-${defect.id}`} className="file-row-defect">
                 <img src="/clip.png" alt="attach" />
-                <span>Выберите файлы (до 10 Мб)</span>
+                <span>Выберите файлы</span>
               </label>
 
               {defects.length > 1 && (
@@ -194,7 +192,7 @@ function ProjectDefectSection({
               )}
             </div>
 
-            {/* Мобильный: строка 1 — номер + крестик, строка 2 — тип + страницы, строка 3 — файл */}
+            {/* Мобильный */}
             <div className="defect-mobile mobile-only">
               <div className="defect-mobile-header">
                 <span className="defect-number">№{index + 1}</span>
@@ -207,10 +205,9 @@ function ProjectDefectSection({
                 <select
                   value={defect.typeId}
                   onChange={e => {
-                    const selected = defectTypes.find(d => d.id === Number(e.target.value));
+                    const selectedId = Number(e.target.value);
                     updateDefect(defect.id, {
-                      typeId: Number(e.target.value) || "",
-                      typeName: selected?.name ?? "",
+                      typeId: selectedId || "",
                     });
                   }}
                 >
@@ -245,7 +242,7 @@ function ProjectDefectSection({
 
               <label htmlFor={`defect-upload-mobile-${defect.id}`} className="file-row-defect">
                 <img src="/clip.png" alt="attach" />
-                <span>Выберите файлы (до 10 Мб)</span>
+                <span>Выберите файлы</span>
               </label>
             </div>
 

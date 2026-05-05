@@ -14,58 +14,73 @@ enum Role {
 
 model Project {
   id                Int       @id @default(autoincrement())
+  oneCId            String?   @unique // Индекс для быстрой синхронизации
   name              String
   startDate         DateTime?
   endDate           DateTime?
-  responsible       String
-  responsibleId     String?
-  oneCResponsibleId String?
-  oneCId            String?   @unique
   status            String    @default("В работе")
+  
+  // Ответственный
+  oneCResponsibleId String?   // ID сотрудника в 1С
+  responsibleId     String?   // Ссылка на ID нашей таблицы User
+  responsibleUser   User?     @relation(fields: [responsibleId], references: [id])
+
   archivedAt        DateTime?
   folderUrl         String?
   createdAt         DateTime  @default(now())
 
-  photos          ProjectPhoto[]
-  draft           ProjectDraft?
-  defects         Defect[]
-  responsibleUser User?   @relation(fields: [responsibleId], references: [id])
+  // Связи
+  photos            ProjectPhoto[]
+  defects           Defect[]
+  draft             ProjectDraft?
+
+  @@index([oneCId])
 }
 
 model User {
   id           String    @id @default(uuid())
+  oneCId       String?   @unique
   firstName    String
   lastName     String
   login        String    @unique
   passwordHash String
-  oneCId       String?   @unique
   role         Role      @default(EMPLOYEE)
   isBlocked    Boolean   @default(false)
   email        String?   @unique
-  deletedAt    DateTime?
+  
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
-  passwordResetTokens PasswordResetToken[]
   projects            Project[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([oneCId])
+}
+
+model DefectType {
+  id      Int      @id @default(autoincrement())
+  oneCId  String   @unique
+  name    String
+  defects Defect[]
 }
 
 model Defect {
   id        Int    @id @default(autoincrement())
   projectId Int
-  typeId    Int    // id типа дефекта из справочника
-  typeName  String // название типа — для отображения
-  pages     Int    // количество страниц
+  typeId    Int    // Ссылка на DefectType
+  pages     Int
 
-  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  photos  ProjectPhoto[]
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  defectType DefectType   @relation(fields: [typeId], references: [id])
+  photos     ProjectPhoto[]
 }
 
 model ProjectPhoto {
   id           Int      @id @default(autoincrement())
   projectId    Int
-  section      String?  // для обычных секций
-  defectId     Int?     // для фото дефектов
+  defectId     Int?
+  section      String?
   originalName String
   filename     String?
   yandexPath   String?
