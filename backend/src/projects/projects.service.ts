@@ -503,11 +503,17 @@ export class ProjectsService {
     order: number,
   ): string {
     const ext = originalName.split('.').pop() ?? 'jpg';
+    const orderStr = String(order).padStart(3, '0');
+    const capitalizeFirst = (s: string) => {
+      const trimmed = s.trim();
+      if (!trimmed) return trimmed;
+      return trimmed[0].toUpperCase() + trimmed.slice(1);
+    };
     if (defectTypeName) {
-      return `${defectTypeName.toLowerCase()}${order}.${ext}`;
+      return `${capitalizeFirst(defectTypeName)}${orderStr}.${ext}`;
     }
-    const prefix = this.sectionKeyMap[section ?? ''] ?? (section ?? 'файл').toLowerCase();
-    return `${prefix}${order}.${ext}`;
+    const prefix = this.sectionKeyMap[section ?? ''] ?? (section ?? 'файл');
+    return `${capitalizeFirst(prefix)}${orderStr}.${ext}`;
   }
 
   private async createFolder(folderPath: string): Promise<void> {

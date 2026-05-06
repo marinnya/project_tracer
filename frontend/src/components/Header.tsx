@@ -69,90 +69,92 @@ function Header({
 
   return (
     <header className="topbar">
-      <Link to="/" className="logo">
-        <div className="logo-icon"><img src="/tracer.png"/></div>
-        <div className="logo-text">
-          <div className="logo-title">{title}</div>
-          <div className="logo-subtitle">{subtitle}</div>
-        </div>
-      </Link>
+      <div className="topbar-inner">
+        <Link to="/" className="logo">
+          <div className="logo-icon"><img src="/tracer.png"/></div>
+          <div className="logo-text">
+            <div className="logo-title">{title}</div>
+            <div className="logo-subtitle">{subtitle}</div>
+          </div>
+        </Link>
 
-      {/* Десктопное меню приложения */}
-      <nav className="menu desktop-only">
-        <button className={`tab ${isActive("/") ? "active" : ""}`} onClick={() => navigate("/")}>
-          Проекты
-        </button>
-
-        {/* Вкладка "Сотрудники" только для админа; проверяем активность пути и ставим соотвествующий класс*/}
-        {currentUser.role === "admin" && (
-          <button className={`tab ${isActive("/employees") ? "active" : ""}`} onClick={() => navigate("/employees")}>
-            Сотрудники
+        {/* Десктопное меню приложения */}
+        <nav className="menu desktop-only">
+          <button className={`tab ${isActive("/") ? "active" : ""}`} onClick={() => navigate("/")}>
+            Проекты
           </button>
-        )}
-      </nav>
 
-      {/*Блок пользователя; ref позволяет получить прямой доступ к DOM-элементу, на который он установлен, будет ссылкой на этот div*/}
-      <div className="user">
-        <div className="mobile-only mobile-user-trigger" ref={mobileMenuRef} onClick={() => setMobileMenuOpen((prev) => !prev)}>
-            <img src="/arrow_down.png" alt="Меню" className={`arrow ${mobileMenuOpen ? "open" : ""}`}/>
-            <div className="avatar mobile-only">{initials}</div>
+          {/* Вкладка "Сотрудники" только для админа; проверяем активность пути и ставим соотвествующий класс*/}
+          {currentUser.role === "admin" && (
+            <button className={`tab ${isActive("/employees") ? "active" : ""}`} onClick={() => navigate("/employees")}>
+              Сотрудники
+            </button>
+          )}
+        </nav>
 
-            {/* Мобильная кнопка "Проекты" */}
-            {mobileMenuOpen && (
-            <div className="mobile-menu">
-                <button
-                  className={`mobile-nav-btn ${isActive("/") ? "active" : ""}`}
-                  onClick={() => {
-                    navigate("/");
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  <img src="/projects.png" alt="" className="nav-icon" />
-                  Проекты
-                </button>
+        {/*Блок пользователя; ref позволяет получить прямой доступ к DOM-элементу, на который он установлен, будет ссылкой на этот div*/}
+        <div className="user">
+          <div className="mobile-only mobile-user-trigger" ref={mobileMenuRef} onClick={() => setMobileMenuOpen((prev) => !prev)}>
+              <img src="/arrow_down.png" alt="Меню" className={`arrow ${mobileMenuOpen ? "open" : ""}`}/>
+              <div className="avatar mobile-only">{initials}</div>
 
-                {/* Мобильная кнопка "Сотрудники" для админа*/}
-                {currentUser.role === "admin" && (
-                    <button
-                      className={`mobile-nav-btn ${isActive("/employees") ? "active" : ""}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate("/employees");
-                        setMobileMenuOpen(false);
-                      }}
-                    >
-                      <img src="/users.png" alt="" className="nav-icon" />
-                      Сотрудники
-                    </button>
-                )}
+              {/* Мобильная кнопка "Проекты" */}
+              {mobileMenuOpen && (
+              <div className="mobile-menu">
+                  <button
+                    className={`mobile-nav-btn ${isActive("/") ? "active" : ""}`}
+                    onClick={() => {
+                      navigate("/");
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <img src="/projects.png" alt="" className="nav-icon" />
+                    Проекты
+                  </button>
 
-                {/* Кнопка "Выйти" */}
-                <button
-                  className="logout-btn"
-                  onClick={() => {
-                    handleLogout();
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  <img src="/exit.png" alt="Выйти" className="logout-icon" />
-                  Выйти
-                </button>
-            </div>
-            )}
-        </div>
-            
-        {/*Десктопное приветствие*/}
-        <span className="welcome desktop-only">Добро пожаловать, {currentUser.name}!</span>
+                  {/* Мобильная кнопка "Сотрудники" для админа*/}
+                  {currentUser.role === "admin" && (
+                      <button
+                        className={`mobile-nav-btn ${isActive("/employees") ? "active" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate("/employees");
+                          setMobileMenuOpen(false);
+                        }}
+                      >
+                        <img src="/users.png" alt="" className="nav-icon" />
+                        Сотрудники
+                      </button>
+                  )}
 
-        <div className="avatar desktop-only" ref={desktopMenuRef} onClick={() => setDesktopMenuOpen((prev) => !prev)}>{initials}
-            {desktopMenuOpen && (
-                <div className="user-menu">
-                    <button className="logout-btn" onClick={handleLogout}>
-                      <img src="/exit.png" alt="Выйти" className="logout-icon" />
-                      Выйти
-                    </button>
-                </div>
-            )}
+                  {/* Кнопка "Выйти" */}
+                  <button
+                    className="logout-btn"
+                    onClick={() => {
+                      handleLogout();
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <img src="/exit.png" alt="Выйти" className="logout-icon" />
+                    Выйти
+                  </button>
+              </div>
+              )}
+          </div>
+              
+          {/*Десктопное приветствие*/}
+          <span className="welcome desktop-only">Добро пожаловать, {currentUser.name}!</span>
+
+          <div className="avatar desktop-only" ref={desktopMenuRef} onClick={() => setDesktopMenuOpen((prev) => !prev)}>{initials}
+              {desktopMenuOpen && (
+                  <div className="user-menu">
+                      <button className="logout-btn" onClick={handleLogout}>
+                        <img src="/exit.png" alt="Выйти" className="logout-icon" />
+                        Выйти
+                      </button>
+                  </div>
+              )}
+          </div>
         </div>
       </div>
     </header>

@@ -10,12 +10,20 @@
 /* Шапка */
 .topbar {
   height: 72px;
-  padding: 0 32px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #eee;
   background: #fafafa;
+}
+
+.topbar-inner {
+  width: 100%;
+  height: 72px;
+  padding: 0 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .logo {
@@ -639,6 +647,11 @@
 /* Ограничение ширины на широких мониторах */
 @media (min-width: 1600px) {
   .content {
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+
+  .topbar-inner {
     max-width: 1500px;
     margin: 0 auto;
   }
