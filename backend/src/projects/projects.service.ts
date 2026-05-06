@@ -51,6 +51,7 @@ export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
   private readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk/resources';
   private readonly BATCH_SIZE = 10;
+  private readonly yandexRootFolder = process.env.YANDEX_ROOT_FOLDER ?? 'ТестПриложения';
   private readonly MAX_PAGES_PER_SECTION = 300;
   private readonly MAX_PAGES_PER_DEFECT = 300;
   private readonly MAX_PHOTOS_PER_SECTION = 300;
@@ -445,12 +446,13 @@ export class ProjectsService {
       .map((p) => {
         const match = findRenamed(p);
         const filename = match?.filename ?? p.originalName;
+        const yandexProjectRoot = this.getYandexProjectRoot(projectName);
         return {
           section: p.section,
           defectId: null,
           originalName: p.originalName,
           filename,
-          yandexPath: `${projectName}/${p.section ?? 'Дефекты'}/${filename}`,
+          yandexPath: `${yandexProjectRoot}/${p.section ?? 'Дефекты'}/${filename}`,
           order: p.order,
         };
       });
@@ -463,7 +465,7 @@ export class ProjectsService {
       .flatMap((p) => {
         const match = findRenamed(p);
         const filename = match?.filename ?? p.originalName;
-        const yandexPath = `${projectName}/${p.section ?? 'Дефекты'}/${filename}`;
+        const yandexPath = `${this.getYandexProjectRoot(projectName)}/${p.section ?? 'Дефекты'}/${filename}`;
         const meta = photosWithMeta.find(
           (pm) =>
             pm.originalName === p.originalName &&
@@ -545,6 +547,11 @@ export class ProjectsService {
       headers: this.getHeaders(),
     });
     return data.public_url;
+  }
+
+  private getYandexProjectRoot(projectName: string) {
+    // Складываем ВСЕ проекты строго в одну корневую папку на диске
+    return `${this.yandexRootFolder}/${projectName}`;
   }
 
   async readTempFiles(
@@ -635,12 +642,15 @@ export class ProjectsService {
       filename: string;
     }[];
   }> {
-    await this.createFolder(projectName);
+    // Гарантируем существование корневой папки и папки проекта внутри неё
+    await this.createFolder(this.yandexRootFolder);
+    const yandexProjectRoot = this.getYandexProjectRoot(projectName);
+    await this.createFolder(yandexProjectRoot);
 
     const folders = new Set<string>();
     photos.forEach((p) => folders.add(p.section ?? 'Дефекты'));
     for (const folder of folders) {
-      await this.createFolder(`${projectName}/${folder}`);
+      await this.createFolder(`${yandexProjectRoot}/${folder}`);
     }
 
     const newPhotos = photos.filter((p) => !p.yandexPath);
@@ -698,7 +708,7 @@ export class ProjectsService {
             originalname: Buffer.from(renamedFilename).toString('latin1'),
           };
 
-          return this.uploadFile(renamedFile, `${projectName}/${section}`).catch((e: unknown) => {
+          return this.uploadFile(renamedFile, `${yandexProjectRoot}/${section}`).catch((e: unknown) => {
             const message = e instanceof Error ? e.message : String(e);
             throw new InternalServerErrorException(`Ошибка загрузки файла ${originalName}: ${message}`);
           });
@@ -709,7 +719,7 @@ export class ProjectsService {
       onProgress?.(uploadedCount, totalNew);
     }
 
-    const folderUrl = await this.getPublicUrl(projectName);
+    const folderUrl = await this.getPublicUrl(yandexProjectRoot);
     return { message: 'Файлы успешно загружены', folderUrl, renamedPhotos };
   }
 
