@@ -51,7 +51,8 @@ export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
   private readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk/resources';
   private readonly BATCH_SIZE = 10;
-  private readonly yandexRootFolder = process.env.YANDEX_ROOT_FOLDER ?? 'ТестПриложения';
+  private readonly yandexRootFolder =
+    process.env.YANDEX_ROOT_FOLDER ?? 'ТестБотПТО/ТестПриложения';
   private readonly MAX_PAGES_PER_SECTION = 300;
   private readonly MAX_PAGES_PER_DEFECT = 300;
   private readonly MAX_PHOTOS_PER_SECTION = 300;
@@ -523,6 +524,17 @@ export class ProjectsService {
     }
   }
 
+  private async ensureFolderPath(folderPath: string): Promise<void> {
+    const normalized = folderPath.replace(/^\/+|\/+$/g, '');
+    if (!normalized) return;
+    const parts = normalized.split('/').filter(Boolean);
+    let current = '';
+    for (const part of parts) {
+      current = current ? `${current}/${part}` : part;
+      await this.createFolder(current);
+    }
+  }
+
   private async uploadFile(file: UploadFile, folderPath: string): Promise<void> {
     const filename = Buffer.from(file.originalname, 'latin1').toString('utf8');
     const filePath = `${encodeURIComponent(folderPath)}/${encodeURIComponent(filename)}`;
@@ -643,14 +655,14 @@ export class ProjectsService {
     }[];
   }> {
     // Гарантируем существование корневой папки и папки проекта внутри неё
-    await this.createFolder(this.yandexRootFolder);
+    await this.ensureFolderPath(this.yandexRootFolder);
     const yandexProjectRoot = this.getYandexProjectRoot(projectName);
-    await this.createFolder(yandexProjectRoot);
+    await this.ensureFolderPath(yandexProjectRoot);
 
     const folders = new Set<string>();
     photos.forEach((p) => folders.add(p.section ?? 'Дефекты'));
     for (const folder of folders) {
-      await this.createFolder(`${yandexProjectRoot}/${folder}`);
+      await this.ensureFolderPath(`${yandexProjectRoot}/${folder}`);
     }
 
     const newPhotos = photos.filter((p) => !p.yandexPath);
