@@ -46,6 +46,7 @@ function ProjectDefectSection({
   onRemoveSavedPhoto,
 }: Props) {
   const [expandedMap, setExpandedMap] = useState<Record<number, boolean>>({});
+  const [validationErrorByDefectId, setValidationErrorByDefectId] = useState<Record<number, string>>({});
   // загружаем типы дефектов из БД (синхронизированы из 1С)
   const [defectTypes, setDefectTypes] = useState<DefectType[]>([]);
 
@@ -57,12 +58,21 @@ function ProjectDefectSection({
 
   const updateDefect = (id: number, patch: Partial<Omit<Defect, "id">>) => {
     onDefectsChange(defects.map(d => (d.id === id ? { ...d, ...patch } : d)));
+    setValidationErrorByDefectId(prev => {
+      if (!prev[id]) return prev;
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
   };
 
   const addDefect = () => {
     const last = defects[defects.length - 1];
     if (!last?.typeId || !last?.pages) {
-      alert("Заполните тип дефекта и количество страниц");
+      setValidationErrorByDefectId(prev => ({
+        ...prev,
+        [last.id]: "Выберите тип дефекта и количество страниц",
+      }));
       return;
     }
     onDefectsChange([
@@ -302,6 +312,12 @@ function ProjectDefectSection({
                   {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
                 </button>
               </ul>
+            )}
+
+            {validationErrorByDefectId[defect.id] && (
+              <div style={{ color: "#d32f2f", fontSize: 13, marginTop: 6 }}>
+                {validationErrorByDefectId[defect.id]}
+              </div>
             )}
           </div>
         );
