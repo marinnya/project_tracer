@@ -19,6 +19,7 @@ type OneCEmployee = {
   id: string;
   firstName: string;
   lastName: string;
+  displayName: string;
 };
 
 const validateLogin = (login: string): string | null => {
@@ -129,7 +130,7 @@ export default function AddModal({ onClose, onSave, existingOneCIds }: Props) {
                 <option value="">Выберите сотрудника</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
-                    {emp.firstName} {emp.lastName}
+                    {emp.displayName}
                   </option>
                 ))}
               </select>

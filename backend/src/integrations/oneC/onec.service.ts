@@ -97,7 +97,12 @@ export class OneCService {
 
   async getEmployeesForSelect() {
     const users = await this.prisma.user.findMany({ where: { oneCId: { not: null } } });
-    return users.map(u => ({ id: u.oneCId, name: `${u.lastName} ${u.firstName}` }));
+    return users.map((u) => ({
+      id: u.oneCId,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      displayName: `${u.lastName} ${u.firstName}`.trim(),
+    }));
   }
 
   async sendProjectUpdate(projectId: number) {
