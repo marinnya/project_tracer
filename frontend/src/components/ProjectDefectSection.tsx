@@ -315,7 +315,7 @@ function ProjectDefectSection({
             )}
 
             {validationErrorByDefectId[defect.id] && (
-              <div style={{ color: "#d32f2f", fontSize: 13, marginTop: 6 }}>
+              <div style={{ color: "#d32f2f", fontSize: 13, marginTop: 10 }}>
                 {validationErrorByDefectId[defect.id]}
               </div>
             )}
