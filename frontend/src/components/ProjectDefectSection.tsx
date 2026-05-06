@@ -109,6 +109,10 @@ function ProjectDefectSection({
     updateDefect(defectId, { files: defect.files.filter(f => f.name !== fileName) });
   };
 
+  const isTypeTaken = (typeId: number, currentDefectId: number) => {
+    return defects.some(d => d.id !== currentDefectId && d.typeId === typeId);
+  };
+
   return (
     <div className="project-section">
       <h3>{title}</h3>
@@ -145,14 +149,23 @@ function ProjectDefectSection({
                 <select
                   value={defect.typeId}
                   onChange={e => {
-                    updateDefect(defect.id, {
-                      typeId: Number(e.target.value) || "",
-                    });
+                    const selectedId = Number(e.target.value);
+                    if (selectedId && isTypeTaken(selectedId, defect.id)) {
+                      alert("Нельзя добавить два дефекта с одинаковым типом");
+                      return;
+                    }
+                    updateDefect(defect.id, { typeId: selectedId || "" });
                   }}
                 >
                   <option value="">Выберите тип дефекта</option>
                   {defectTypes.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
+                    <option
+                      key={d.id}
+                      value={d.id}
+                      disabled={isTypeTaken(d.id, defect.id)}
+                    >
+                      {d.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -206,14 +219,22 @@ function ProjectDefectSection({
                   value={defect.typeId}
                   onChange={e => {
                     const selectedId = Number(e.target.value);
-                    updateDefect(defect.id, {
-                      typeId: selectedId || "",
-                    });
+                    if (selectedId && isTypeTaken(selectedId, defect.id)) {
+                      alert("Нельзя добавить два дефекта с одинаковым типом");
+                      return;
+                    }
+                    updateDefect(defect.id, { typeId: selectedId || "" });
                   }}
                 >
                   <option value="">Выберите тип дефекта</option>
                   {defectTypes.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
+                    <option
+                      key={d.id}
+                      value={d.id}
+                      disabled={isTypeTaken(d.id, defect.id)}
+                    >
+                      {d.name}
+                    </option>
                   ))}
                 </select>
 

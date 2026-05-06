@@ -736,6 +736,17 @@ export class ProjectsService {
     projectId: number,
     defects: { id?: number; typeId: number; pages: number }[],
   ) {
+    // Один тип дефекта может быть выбран только один раз в рамках проекта
+    const seenTypeIds = new Set<number>();
+    for (const d of defects) {
+      const typeId = Number(d.typeId);
+      if (!Number.isInteger(typeId) || typeId <= 0) continue;
+      if (seenTypeIds.has(typeId)) {
+        throw new BadRequestException('Нельзя добавить два дефекта с одинаковым типом');
+      }
+      seenTypeIds.add(typeId);
+    }
+
     const existing = await this.prisma.defect.findMany({ where: { projectId } });
     const incomingIds = new Set(defects.filter((d) => d.id && d.id > 0).map((d) => d.id!));
     const toDeleteIds = existing.filter((d) => !incomingIds.has(d.id)).map((d) => d.id);

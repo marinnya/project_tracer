@@ -124,6 +124,14 @@ export default function Dashboard({ onLogout }: Props) {
     return new Date(date).toLocaleDateString("ru-RU");
   };
 
+  const formatResponsibleDesktop = (responsible: string) => {
+    return responsible?.trim() ? responsible : "—";
+  };
+
+  const formatResponsibleMobile = (responsible: string) => {
+    return responsible?.trim() ? responsible : "Сотрудник не найден";
+  };
+
   const colSpan = showArchive && role === "ADMIN" ? 6 : 5;
 
   const sortLabels: Record<SortField, string> = {
@@ -276,7 +284,7 @@ export default function Dashboard({ onLogout }: Props) {
                     <td className="name">{project.name}</td>
                     <td>{formatDate(project.startDate)}</td>
                     <td>{formatDate(project.endDate)}</td>
-                    <td>{project.responsible}</td>
+                    <td>{formatResponsibleDesktop(project.responsible)}</td>
                     <td>
                       <span className={`status ${project.status === "В работе" ? "in-progress" : "done"}`}>
                         {project.status}
@@ -337,7 +345,7 @@ export default function Dashboard({ onLogout }: Props) {
 
                 <div className="project-responsible">
                   <img src="/responsible.png" alt="Ответственный" />
-                  <span>{project.responsible}</span>
+                  <span>{formatResponsibleMobile(project.responsible)}</span>
                 </div>
               </div>
             ))
