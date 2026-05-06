@@ -908,10 +908,16 @@ export class ProjectsService {
   }
 
   async getAllProjects() {
-    return this.prisma.project.findMany({
+    const projects = await this.prisma.project.findMany({
       orderBy: { createdAt: 'desc' },
       include: { responsibleUser: { select: { firstName: true, lastName: true } } },
     });
+    return projects.map((p) => ({
+      ...p,
+      responsible: p.responsibleUser
+        ? `${p.responsibleUser.firstName} ${p.responsibleUser.lastName}`.trim()
+        : '',
+    }));
   }
 
   async getProjectsForUser(user: User) {
@@ -920,14 +926,26 @@ export class ProjectsService {
     };
 
     if (user.role === 'ADMIN') {
-      return this.prisma.project.findMany({ orderBy: { createdAt: 'desc' }, include });
+      const projects = await this.prisma.project.findMany({ orderBy: { createdAt: 'desc' }, include });
+      return projects.map((p) => ({
+        ...p,
+        responsible: p.responsibleUser
+          ? `${p.responsibleUser.firstName} ${p.responsibleUser.lastName}`.trim()
+          : '',
+      }));
     }
 
-    return this.prisma.project.findMany({
+    const projects = await this.prisma.project.findMany({
       where: { responsibleId: user.id },
       orderBy: { createdAt: 'desc' },
       include,
     });
+    return projects.map((p) => ({
+      ...p,
+      responsible: p.responsibleUser
+        ? `${p.responsibleUser.firstName} ${p.responsibleUser.lastName}`.trim()
+        : '',
+    }));
   }
 
   async updateDates(projectId: number, startDate: string | null, endDate: string | null) {
