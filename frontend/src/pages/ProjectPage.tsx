@@ -293,7 +293,9 @@ function ProjectPage({ onLogout }: Props) {
 
       const defectsData = defects.map(d => {
         return {
-          id: d.id > 0 ? d.id : undefined,
+          // отправляем и временный отрицательный id тоже,
+          // чтобы бэкенд смог вернуть defectIdMap (tempId -> realId)
+          id: d.id,
           typeId: d.typeId,
           pages: d.pages,
           newPhotos: [],

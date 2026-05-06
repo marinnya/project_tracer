@@ -214,6 +214,11 @@ export class ProjectsService {
         clientKey: string;
         order: number;
       }[];
+      if (defectPhotos.some((p) => Number(p.defectId) <= 0)) {
+        throw new BadRequestException(
+          'Ошибка сохранения файлов дефектов: получен временный defectId. Сначала сохраните черновик, затем повторите сохранение файлов.',
+        );
+      }
       const byDefect = new Map<number, { originalName: string; storedName: string | null; order: number }[]>();
       for (const p of defectPhotos) {
         const list = byDefect.get(p.defectId) ?? [];
