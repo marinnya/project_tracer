@@ -76,7 +76,7 @@ export class ProjectsController {
         },
       }),
       limits: {
-        fileSize: 15 * 1024 * 1024,
+        fileSize: 10 * 1024 * 1024,
         files: 200,
       },
     }),
@@ -115,7 +115,7 @@ export class ProjectsController {
         },
       }),
       limits: {
-        fileSize: 15 * 1024 * 1024,
+        fileSize: 10 * 1024 * 1024,
         files: 50,
       },
     }),

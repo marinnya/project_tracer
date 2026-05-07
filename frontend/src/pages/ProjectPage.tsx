@@ -618,7 +618,6 @@ function ProjectPage({ onLogout }: Props) {
               onFilesChange={(files) => updateSection(title, { files })}
               onPagesChange={(pages) => updateSection(title, { pages })}
               onRemoveSaved={handleRemoveSavedPhoto}
-              onClientError={setError}
             />
           ))}
 
@@ -628,7 +627,6 @@ function ProjectPage({ onLogout }: Props) {
             savedDefects={savedDefects}
             onDefectsChange={setDefects}
             onRemoveSavedPhoto={handleRemoveSavedDefectPhoto}
-            onClientError={setError}
           />
 
           {error && <p className="error">{error}</p>}

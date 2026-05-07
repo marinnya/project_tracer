@@ -58,6 +58,7 @@ export class ProjectsService {
   private readonly MAX_PHOTOS_PER_SECTION = 300;
   private readonly MAX_PHOTOS_PER_DEFECT = 300;
   private readonly MAX_PHOTOS_PER_PROJECT = 2000;
+  private readonly MAX_PROJECT_LOCAL_BYTES = Math.floor(2.5 * 1024 * 1024 * 1024);
 
   private readonly sseClients = new Map<number, Response>();
 
@@ -106,6 +107,7 @@ export class ProjectsService {
     files: Express.Multer.File[],
     body: SaveDraftBody,
   ) {
+    this.enforceProjectLocalStorageLimit(projectId, files);
     this.validateDraftLimits(body);
 
     const clientKeyToStoredName = this.persistIncomingFiles(
@@ -184,6 +186,7 @@ export class ProjectsService {
     files: Express.Multer.File[],
     body: SaveDraftFilesBody,
   ) {
+    this.enforceProjectLocalStorageLimit(projectId, files);
     this.validateDraftFileBatchLimits(body);
 
     const clientKeyToStoredName = this.persistIncomingFiles(
@@ -291,6 +294,54 @@ export class ProjectsService {
     }
 
     return clientKeyToStoredName;
+  }
+
+  private enforceProjectLocalStorageLimit(projectId: number, incomingFiles: Express.Multer.File[]) {
+    if (!incomingFiles?.length) return;
+
+    const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
+    const currentBytes = this.safeDirSizeBytes(tmpDir);
+    const incomingBytes = incomingFiles.reduce((s, f) => s + (Number(f.size) || 0), 0);
+    const nextBytes = currentBytes + incomingBytes;
+
+    if (nextBytes <= this.MAX_PROJECT_LOCAL_BYTES) return;
+
+    // Важно: файлы уже записаны multer'ом в uploads/incoming/... — очищаем их, чтобы не забивать диск.
+    for (const f of incomingFiles) {
+      try {
+        if (f?.path && fs.existsSync(f.path)) fs.unlinkSync(f.path);
+      } catch {
+        // ignore
+      }
+    }
+
+    const maxGb = (this.MAX_PROJECT_LOCAL_BYTES / 1024 / 1024 / 1024).toFixed(1);
+    const nextGb = (nextBytes / 1024 / 1024 / 1024).toFixed(2);
+    throw new BadRequestException(
+      `Превышен лимит локального объёма фото для проекта: максимум ${maxGb} ГБ. ` +
+        `Сейчас получилось бы ${nextGb} ГБ. Удалите часть фото и попробуйте снова.`,
+    );
+  }
+
+  private safeDirSizeBytes(dirPath: string): number {
+    try {
+      return this.dirSizeBytes(dirPath);
+    } catch {
+      return 0;
+    }
+  }
+
+  private dirSizeBytes(dirPath: string): number {
+    if (!fs.existsSync(dirPath)) return 0;
+    const stat = fs.statSync(dirPath);
+    if (stat.isFile()) return stat.size;
+    if (!stat.isDirectory()) return 0;
+
+    let total = 0;
+    for (const entry of fs.readdirSync(dirPath)) {
+      total += this.dirSizeBytes(path.join(dirPath, entry));
+    }
+    return total;
   }
 
   private validateDraftLimits(body: SaveDraftBody) {
