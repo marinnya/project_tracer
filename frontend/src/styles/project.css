@@ -457,15 +457,15 @@ input[type="checkbox"] {
 .file-list-label {
   font-size: 13px;
   color: #1976d2;
-  margin-bottom: 5px;
+  /*margin-bottom: 5px;*/
 }
 
 .file-list-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 5px;
+  justify-content: flex-start;
+  gap: 40px;
+  /*margin-bottom: 5px;*/
 }
 
 .file-list-actions {
