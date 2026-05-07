@@ -151,6 +151,18 @@ function ProjectDefectSection({
     updateDefect(defectId, { files: defect.files.filter(f => f.name !== fileName) });
   };
 
+  const removeAllForDefect = (defect: Defect) => {
+    const savedDef = savedDefects.find(sd => sd.id === defect.id);
+    savedDef?.photos.filter(p => !p.yandexPath).forEach(p => onRemoveSavedPhoto(p.id));
+    updateDefect(defect.id, { files: [] });
+    setFileErrorByDefectId(prev => {
+      if (!prev[defect.id]) return prev;
+      const copy = { ...prev };
+      delete copy[defect.id];
+      return copy;
+    });
+  };
+
   const isTypeTaken = (typeId: number, currentDefectId: number) => {
     return defects.some(d => d.id !== currentDefectId && d.typeId === typeId);
   };
@@ -313,7 +325,25 @@ function ProjectDefectSection({
               <ul className="file-list">
                 {isExpanded && (
                   <>
-                    <p className="file-list-label">Добавленные файлы</p>
+                    <div className="file-list-header">
+                      <p className="file-list-label">Добавленные файлы</p>
+                      <div className="file-list-actions">
+                        <button
+                          type="button"
+                          className="file-list-toggle"
+                          onClick={() => setExpandedMap(prev => ({ ...prev, [defect.id]: false }))}
+                        >
+                          Свернуть
+                        </button>
+                        <button
+                          type="button"
+                          className="file-list-danger"
+                          onClick={() => removeAllForDefect(defect)}
+                        >
+                          Удалить все
+                        </button>
+                      </div>
+                    </div>
                     {allFiles.map((item, i) => (
                       <li key={`${item.name}-${i}`} className="file-item">
                         <span className="file-name">{item.name}</span>
@@ -337,12 +367,15 @@ function ProjectDefectSection({
                   </>
                 )}
 
-                <button
-                  className="file-list-toggle"
-                  onClick={() => setExpandedMap(prev => ({ ...prev, [defect.id]: !prev[defect.id] }))}
-                >
-                  {isExpanded ? "Свернуть" : `Показать все (${allFiles.length})`}
-                </button>
+                {!isExpanded && (
+                  <button
+                    type="button"
+                    className="file-list-toggle"
+                    onClick={() => setExpandedMap(prev => ({ ...prev, [defect.id]: true }))}
+                  >
+                    {`Показать все (${allFiles.length})`}
+                  </button>
+                )}
               </ul>
             )}
 

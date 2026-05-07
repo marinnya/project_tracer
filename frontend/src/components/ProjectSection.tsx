@@ -97,6 +97,13 @@ function ProjectSection({
     onFilesChange(files.filter(f => f.name !== name));
   };
 
+  const removeAll = () => {
+    // удаляем только то, что можно удалить (не трогаем то, что уже на Яндексе)
+    savedPhotos.filter(p => !p.yandexPath).forEach(p => onRemoveSaved(p.id));
+    onFilesChange([]);
+    setLocalError(null);
+  };
+
   return (
     <div className="project-section">
       <h3>{title}</h3>
@@ -138,7 +145,25 @@ function ProjectSection({
         <ul className="file-list">
           {expanded && (
             <>
-              <p className="file-list-label">Добавленные файлы</p>
+              <div className="file-list-header">
+                <p className="file-list-label">Добавленные файлы</p>
+                <div className="file-list-actions">
+                  <button
+                    type="button"
+                    className="file-list-toggle"
+                    onClick={() => setExpanded(false)}
+                  >
+                    Свернуть
+                  </button>
+                  <button
+                    type="button"
+                    className="file-list-danger"
+                    onClick={removeAll}
+                  >
+                    Удалить все
+                  </button>
+                </div>
+              </div>
               {allFiles.map((item, index) => (
                 <li key={`${item.name}-${index}`} className="file-item">
                   <span className="file-name">{item.name}</span>
@@ -162,12 +187,15 @@ function ProjectSection({
             </>
           )}
 
-          <button
-            className="file-list-toggle"
-            onClick={() => setExpanded(prev => !prev)}
-          >
-            {expanded ? "Свернуть" : `Показать все (${allFiles.length})`}
-          </button>
+          {!expanded && (
+            <button
+              type="button"
+              className="file-list-toggle"
+              onClick={() => setExpanded(true)}
+            >
+              {`Показать все (${allFiles.length})`}
+            </button>
+          )}
         </ul>
       )}
     </div>

@@ -460,6 +460,35 @@ input[type="checkbox"] {
   margin-bottom: 5px;
 }
 
+.file-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 5px;
+}
+
+.file-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.file-list-danger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #d64545;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.file-list-danger:hover {
+  color: #b71c1c;
+  text-decoration: underline;
+}
+
 .file-item {
   display: flex;
   align-items: center;
