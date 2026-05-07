@@ -105,6 +105,11 @@ export class OneCService {
     }));
   }
 
+  // Сейчас это заглушка: если потребуется, можно включить отправку в 1С обратно.
+  async sendProjectUpdate(_projectId: number) {
+    return;
+  }
+
   /*async sendProjectUpdate(projectId: number) {
     const endpoint = process.env.ONEC_OUTGOING_URL;
     if (!endpoint) {

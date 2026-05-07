@@ -1152,10 +1152,6 @@ export class ProjectsService implements OnModuleInit {
         data: { folderUrl, status: 'Завершен', archivedAt: new Date() },
       });
     });
-    // отправка в 1С — вне транзакции, чтобы не откатывать коммит при ошибке 1С
-    await this.oneCService.sendProjectUpdate(projectId).catch((e: unknown) => {
-      this.logger.warn(`Ошибка отправки в 1С: ${e instanceof Error ? e.message : e}`);
-    });
   }
 
   async archiveProject(projectId: number) {
