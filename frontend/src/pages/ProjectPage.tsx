@@ -81,6 +81,15 @@ const formatDateDisplay = (date: string) => {
   return `${d}.${m}.${y}`;
 };
 
+const formatEta = (ms: number) => {
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  const totalSec = Math.round(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  if (m <= 0) return `${s} сек`;
+  return `${m} мин ${String(s).padStart(2, "0")} сек`;
+};
+
 function ProjectPage({ onLogout }: Props) {
   const [completed, setCompleted] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -267,6 +276,8 @@ function ProjectPage({ onLogout }: Props) {
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
+    setUploadProgress(0);
+    setUploadLabel("Сохранение...");
 
     try {
       // Сжимаем новые фото перед отправкой (чтобы быстрее грузилось и меньше занимало места)
@@ -404,7 +415,9 @@ function ProjectPage({ onLogout }: Props) {
         });
       }
 
-      const CHUNK_SIZE = 40;
+      // Важно: слишком большие multipart-запросы часто ловят 413 от nginx/прокси.
+      // Меньше chunk => надёжнее загрузка, лучше UX на слабой сети.
+      const CHUNK_SIZE = 10;
       const uploadChunkWithRetry = async (chunk: PendingUpload[], retries = 3) => {
         const formData = new FormData();
         const fileToSection: Record<string, string> = {};
@@ -436,6 +449,7 @@ function ProjectPage({ onLogout }: Props) {
         }
       };
 
+      const saveStartMs = Date.now();
       for (let i = 0; i < pendingUploads.length; i += CHUNK_SIZE) {
         const chunk = pendingUploads.slice(i, i + CHUNK_SIZE);
         await uploadChunkWithRetry(chunk);
@@ -443,7 +457,11 @@ function ProjectPage({ onLogout }: Props) {
         const done = Math.min(i + chunk.length, pendingUploads.length);
         const pct = pendingUploads.length === 0 ? 9 : Math.min(9, Math.round((done / pendingUploads.length) * 9));
         setUploadProgress(pct);
-        setUploadLabel(`Сохранение... (${done}/${pendingUploads.length})`);
+        const elapsed = Date.now() - saveStartMs;
+        const perFile = done > 0 ? elapsed / done : 0;
+        const remainingMs = (pendingUploads.length - done) * perFile;
+        const eta = formatEta(remainingMs);
+        setUploadLabel(`Сохранение... (${done}/${pendingUploads.length})${eta ? `, осталось ~${eta}` : ""}`);
       }
 
       // обновим usage после успешной докачки
@@ -668,7 +686,7 @@ function ProjectPage({ onLogout }: Props) {
 
           {error && <p className="error">{error}</p>}
 
-          {isUploading && (
+          {(isUploading || isSaving) && (
             <div className="progress-wrapper">
               <p className="progress-label">{uploadLabel} {Math.round(uploadProgress)}%</p>
               <div className="progress-bar">
