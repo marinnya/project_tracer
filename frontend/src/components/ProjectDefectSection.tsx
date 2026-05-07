@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
 import { MAX_PHOTO_FILE_BYTES, MAX_PHOTO_FILE_LABEL } from "../constants/uploads";
+import { nextTempDefectId } from "../utils/tempDefectId";
 
 type DefectType = {
   id: number;
@@ -50,6 +51,7 @@ function ProjectDefectSection({
 }: Props) {
   const [expandedMap, setExpandedMap] = useState<Record<number, boolean>>({});
   const [validationErrorByDefectId, setValidationErrorByDefectId] = useState<Record<number, string>>({});
+  const [fileErrorByDefectId, setFileErrorByDefectId] = useState<Record<number, string>>({});
   // загружаем типы дефектов из БД (синхронизированы из 1С)
   const [defectTypes, setDefectTypes] = useState<DefectType[]>([]);
 
@@ -62,6 +64,12 @@ function ProjectDefectSection({
   const updateDefect = (id: number, patch: Partial<Omit<Defect, "id">>) => {
     onDefectsChange(defects.map(d => (d.id === id ? { ...d, ...patch } : d)));
     setValidationErrorByDefectId(prev => {
+      if (!prev[id]) return prev;
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+    setFileErrorByDefectId(prev => {
       if (!prev[id]) return prev;
       const copy = { ...prev };
       delete copy[id];
@@ -80,7 +88,7 @@ function ProjectDefectSection({
     }
     onDefectsChange([
       ...defects,
-      { id: -Date.now(), typeId: "", pages: "", files: [] },
+      { id: nextTempDefectId(), typeId: "", pages: "", files: [] },
     ]);
   };
 
@@ -119,11 +127,19 @@ function ProjectDefectSection({
     });
 
     if (tooLarge.length) {
-      onClientError?.(
+      const message =
         tooLarge.length === 1
           ? `Файл «${tooLarge[0]}» больше ${MAX_PHOTO_FILE_LABEL} и не был добавлен.`
-          : `Не добавлены файлы больше ${MAX_PHOTO_FILE_LABEL}: ${tooLarge.map(n => `«${n}»`).join(", ")}.`,
-      );
+          : `Не добавлены файлы больше ${MAX_PHOTO_FILE_LABEL}: ${tooLarge.map(n => `«${n}»`).join(", ")}.`;
+      setFileErrorByDefectId(prev => ({ ...prev, [defect.id]: message }));
+      onClientError?.(message);
+    } else {
+      setFileErrorByDefectId(prev => {
+        if (!prev[defect.id]) return prev;
+        const copy = { ...prev };
+        delete copy[defect.id];
+        return copy;
+      });
     }
 
     updateDefect(defect.id, { files: result });
@@ -330,9 +346,9 @@ function ProjectDefectSection({
               </ul>
             )}
 
-            {validationErrorByDefectId[defect.id] && (
+            {(validationErrorByDefectId[defect.id] || fileErrorByDefectId[defect.id]) && (
               <div style={{ color: "#d32f2f", fontSize: 13, marginTop: 10 }}>
-                {validationErrorByDefectId[defect.id]}
+                {validationErrorByDefectId[defect.id] ?? fileErrorByDefectId[defect.id]}
               </div>
             )}
           </div>

@@ -32,6 +32,7 @@ function ProjectSection({
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const handleAddFiles = (newFiles: FileList) => {
     const existing = [
@@ -64,11 +65,14 @@ function ProjectSection({
     });
 
     if (tooLarge.length) {
-      onClientError?.(
+      const message =
         tooLarge.length === 1
           ? `Файл «${tooLarge[0]}» больше ${MAX_PHOTO_FILE_LABEL} и не был добавлен.`
-          : `Не добавлены файлы больше ${MAX_PHOTO_FILE_LABEL}: ${tooLarge.map(n => `«${n}»`).join(", ")}.`,
-      );
+          : `Не добавлены файлы больше ${MAX_PHOTO_FILE_LABEL}: ${tooLarge.map(n => `«${n}»`).join(", ")}.`;
+      setLocalError(message);
+      onClientError?.(message);
+    } else {
+      setLocalError(null);
     }
 
     onFilesChange(result);
@@ -127,6 +131,8 @@ function ProjectSection({
         <span className="desktop-only">Выберите файлы (максимальный размер до 15 Мб)</span>
         <span className="mobile-only">Выберите файлы (до 15 Мб)</span>
       </div>
+
+      {localError && <div className="inline-error">{localError}</div>}
 
       {allFiles.length > 0 && (
         <ul className="file-list">

@@ -9,6 +9,7 @@ import SuccessModal from "../components/SuccessModal";
 import api from "../utils/api";
 import { getApiErrorMessage } from "../utils/getApiErrorMessage";
 import { MAX_PAGES_PER_PROJECT } from "../constants/uploads";
+import { nextTempDefectId } from "../utils/tempDefectId";
 
 // Обновленный тип проекта под новую схему Prisma
 type Project = {
@@ -107,7 +108,7 @@ function ProjectPage({ onLogout }: Props) {
   );
 
   const [defects, setDefects] = useState<Defect[]>([
-    { id: -Date.now(), typeId: "", pages: "", files: [] }
+    { id: nextTempDefectId(), typeId: "", pages: "", files: [] },
   ]);
 
   useEffect(() => {

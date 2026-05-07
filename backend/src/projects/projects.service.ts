@@ -216,20 +216,25 @@ export class ProjectsService {
         clientKey: string;
         order: number;
       }[];
-      if (defectPhotos.some((p) => Number(p.defectId) <= 0)) {
-        throw new BadRequestException(
-          'Ошибка сохранения файлов дефектов: получен временный defectId. Сначала сохраните черновик, затем повторите сохранение файлов.',
-        );
+      const INT32_MAX = 2147483647;
+      for (const p of defectPhotos) {
+        const defectId = Number(p.defectId);
+        if (!Number.isInteger(defectId) || defectId < 1 || defectId > INT32_MAX) {
+          throw new BadRequestException(
+            'Ошибка сохранения файлов дефектов: получен временный или некорректный defectId. Сначала сохраните черновик, затем повторите сохранение файлов.',
+          );
+        }
       }
       const byDefect = new Map<number, { originalName: string; storedName: string | null; order: number }[]>();
       for (const p of defectPhotos) {
-        const list = byDefect.get(p.defectId) ?? [];
+        const defectId = Number(p.defectId);
+        const list = byDefect.get(defectId) ?? [];
         list.push({
           originalName: p.originalName,
           storedName: p.clientKey ? (clientKeyToStoredName[p.clientKey] ?? null) : null,
           order: p.order,
         });
-        byDefect.set(p.defectId, list);
+        byDefect.set(defectId, list);
       }
       for (const [defectId, defectFiles] of byDefect) {
         await this.saveTempDefectPhotos(defectId, projectId, defectFiles);
