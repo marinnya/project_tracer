@@ -7,6 +7,8 @@ import Header from "../components/Header";
 import { useNavigate, useParams } from "react-router-dom";
 import SuccessModal from "../components/SuccessModal";
 import api from "../utils/api";
+import { getApiErrorMessage } from "../utils/getApiErrorMessage";
+import { MAX_PAGES_PER_PROJECT } from "../constants/uploads";
 
 // Обновленный тип проекта под новую схему Prisma
 type Project = {
@@ -282,6 +284,17 @@ function ProjectPage({ onLogout }: Props) {
     setError(null);
 
     try {
+      const sectionPagesSum = SECTIONS.reduce((s, t) => s + sections[t].pages, 0);
+      const defectPagesSum = defects.reduce((s, d) => s + (Number(d.pages) || 0), 0);
+      const totalPagesDeclared = sectionPagesSum + defectPagesSum;
+      if (totalPagesDeclared > MAX_PAGES_PER_PROJECT) {
+        const msg =
+          `Суммарное количество страниц по проекту не может превышать ${MAX_PAGES_PER_PROJECT}. ` +
+          `Сейчас указано: ${totalPagesDeclared}.`;
+        setError(msg);
+        throw new Error(msg);
+      }
+
       const saveMetaFormData = new FormData();
       const sectionsState = Object.fromEntries(
         SECTIONS.map(title => [title, { pages: sections[title].pages }])
@@ -419,8 +432,10 @@ function ProjectPage({ onLogout }: Props) {
       );
       setDeletedPhotoIds([]);
 
-    } catch {
-      throw new Error("Ошибка сохранения — проверьте консоль бэкенда");
+    } catch (e) {
+      const msg = getApiErrorMessage(e, "Ошибка сохранения");
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setIsSaving(false);
     }
@@ -514,7 +529,7 @@ function ProjectPage({ onLogout }: Props) {
       setShouldRedirect(true);
       setShowModal(true);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
+      setError(getApiErrorMessage(e, "Ошибка загрузки"));
     } finally {
       setIsUploading(false);
     }
@@ -602,6 +617,7 @@ function ProjectPage({ onLogout }: Props) {
               onFilesChange={(files) => updateSection(title, { files })}
               onPagesChange={(pages) => updateSection(title, { pages })}
               onRemoveSaved={handleRemoveSavedPhoto}
+              onClientError={setError}
             />
           ))}
 
@@ -611,6 +627,7 @@ function ProjectPage({ onLogout }: Props) {
             savedDefects={savedDefects}
             onDefectsChange={setDefects}
             onRemoveSavedPhoto={handleRemoveSavedDefectPhoto}
+            onClientError={setError}
           />
 
           {error && <p className="error">{error}</p>}
@@ -639,8 +656,9 @@ function ProjectPage({ onLogout }: Props) {
                     setModalMessage("Данные успешно сохранены!");
                     setShouldRedirect(false);
                     setShowModal(true);
+                  } catch {
+                    /* текст ошибки уже в setError из handleSave */
                   }
-                  catch (e: unknown) { alert(e instanceof Error ? e.message : "Ошибка сохранения"); }
                 }}
                 disabled={isUploading || isSaving}>
                 {isSaving ? "Сохранение..." : "Сохранить"}

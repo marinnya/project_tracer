@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
+import { MAX_PHOTO_FILE_BYTES, MAX_PHOTO_FILE_LABEL } from "../constants/uploads";
 
 type DefectType = {
   id: number;
@@ -34,6 +35,7 @@ type Props = {
   savedDefects: SavedDefect[];
   onDefectsChange: (defects: Defect[]) => void;
   onRemoveSavedPhoto: (id: number) => void;
+  onClientError?: (message: string) => void;
 };
 
 const pageOptions = Array.from({ length: 301 }, (_, i) => i);
@@ -44,6 +46,7 @@ function ProjectDefectSection({
   savedDefects,
   onDefectsChange,
   onRemoveSavedPhoto,
+  onClientError,
 }: Props) {
   const [expandedMap, setExpandedMap] = useState<Record<number, boolean>>({});
   const [validationErrorByDefectId, setValidationErrorByDefectId] = useState<Record<number, string>>({});
@@ -94,8 +97,13 @@ function ProjectDefectSection({
     ];
 
     const result: File[] = [...defect.files];
+    const tooLarge: string[] = [];
 
     Array.from(newFiles).forEach(file => {
+      if (file.size > MAX_PHOTO_FILE_BYTES) {
+        tooLarge.push(file.name);
+        return;
+      }
       let name = file.name;
       const ext = name.includes(".") ? "." + name.split(".").pop() : "";
       const base = name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name;
@@ -109,6 +117,14 @@ function ProjectDefectSection({
       existing.push(name);
       result.push(new File([file], name, { type: file.type }));
     });
+
+    if (tooLarge.length) {
+      onClientError?.(
+        tooLarge.length === 1
+          ? `Файл «${tooLarge[0]}» больше ${MAX_PHOTO_FILE_LABEL} и не был добавлен.`
+          : `Не добавлены файлы больше ${MAX_PHOTO_FILE_LABEL}: ${tooLarge.map(n => `«${n}»`).join(", ")}.`,
+      );
+    }
 
     updateDefect(defect.id, { files: result });
   };

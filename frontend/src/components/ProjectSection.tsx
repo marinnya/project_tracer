@@ -1,4 +1,5 @@
 import { useRef, useState, useMemo } from "react";
+import { MAX_PHOTO_FILE_BYTES, MAX_PHOTO_FILE_LABEL } from "../constants/uploads";
 
 type SavedPhoto = {
   id: number;
@@ -14,6 +15,7 @@ type Props = {
   onFilesChange: (files: File[]) => void;
   onPagesChange: (pages: number) => void;
   onRemoveSaved: (id: number) => void;
+  onClientError?: (message: string) => void;
 };
 
 const pageOptions = Array.from({ length: 301 }, (_, i) => i);
@@ -26,6 +28,7 @@ function ProjectSection({
   onFilesChange,
   onPagesChange,
   onRemoveSaved,
+  onClientError,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -37,8 +40,13 @@ function ProjectSection({
     ];
 
     const result: File[] = [...files];
+    const tooLarge: string[] = [];
 
     Array.from(newFiles).forEach(file => {
+      if (file.size > MAX_PHOTO_FILE_BYTES) {
+        tooLarge.push(file.name);
+        return;
+      }
       let name = file.name;
       const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
       const base = name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : name;
@@ -54,6 +62,14 @@ function ProjectSection({
       existing.push(name);
       result.push(new File([file], name, { type: file.type }));
     });
+
+    if (tooLarge.length) {
+      onClientError?.(
+        tooLarge.length === 1
+          ? `Файл «${tooLarge[0]}» больше ${MAX_PHOTO_FILE_LABEL} и не был добавлен.`
+          : `Не добавлены файлы больше ${MAX_PHOTO_FILE_LABEL}: ${tooLarge.map(n => `«${n}»`).join(", ")}.`,
+      );
+    }
 
     onFilesChange(result);
   };
