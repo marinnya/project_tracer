@@ -90,6 +90,7 @@ function ProjectPage({ onLogout }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadLabel, setUploadLabel] = useState("Сохранение...");
+  const [tmpUsage, setTmpUsage] = useState<{ usedBytes: number; maxBytes: number } | null>(null);
   const navigate = useNavigate();
 
   const { id } = useParams();
@@ -160,7 +161,11 @@ function ProjectPage({ onLogout }: Props) {
       .then(res => setDefectTypes(res.data))
       .catch(() => setDefectTypes([]));
 
-    Promise.all([projectReq, photosReq, draftReq, defectsReq, defectTypesReq])
+    const tmpUsageReq = api.get(`/projects/${id}/tmp-usage`)
+      .then(res => setTmpUsage(res.data))
+      .catch(() => setTmpUsage(null));
+
+    Promise.all([projectReq, photosReq, draftReq, defectsReq, defectTypesReq, tmpUsageReq])
       .finally(() => setIsLoading(false));
   }, [id]);
 
@@ -285,6 +290,20 @@ function ProjectPage({ onLogout }: Props) {
     setError(null);
 
     try {
+      // Быстрый прогноз: чтобы не грузить гигабайты по сети и получить отказ уже на сервере
+      const incomingBytes =
+        SECTIONS.reduce((s, t) => s + sections[t].files.reduce((a, f) => a + f.size, 0), 0) +
+        defects.reduce((s, d) => s + d.files.reduce((a, f) => a + f.size, 0), 0);
+      if (tmpUsage && (tmpUsage.usedBytes + incomingBytes > tmpUsage.maxBytes)) {
+        const maxGb = (tmpUsage.maxBytes / 1024 / 1024 / 1024).toFixed(1);
+        const nextGb = ((tmpUsage.usedBytes + incomingBytes) / 1024 / 1024 / 1024).toFixed(2);
+        const msg =
+          `Превышен лимит локального объёма фото для проекта: максимум ${maxGb} ГБ. ` +
+          `Сейчас получилось бы ${nextGb} ГБ. Удалите часть фото и попробуйте снова.`;
+        setError(msg);
+        throw new Error(msg);
+      }
+
       const sectionPagesSum = SECTIONS.reduce((s, t) => s + sections[t].pages, 0);
       const defectPagesSum = defects.reduce((s, d) => s + (Number(d.pages) || 0), 0);
       const totalPagesDeclared = sectionPagesSum + defectPagesSum;
@@ -411,6 +430,14 @@ function ProjectPage({ onLogout }: Props) {
       for (let i = 0; i < pendingUploads.length; i += CHUNK_SIZE) {
         const chunk = pendingUploads.slice(i, i + CHUNK_SIZE);
         await uploadChunkWithRetry(chunk);
+      }
+
+      // обновим usage после успешной докачки
+      try {
+        const usageRes = await api.get(`/projects/${id}/tmp-usage`);
+        setTmpUsage(usageRes.data);
+      } catch {
+        // ignore
       }
 
       const [photosRes, defectsRes] = await Promise.all([

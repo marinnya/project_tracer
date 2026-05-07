@@ -59,6 +59,7 @@ export class ProjectsService {
   private readonly MAX_PHOTOS_PER_DEFECT = 300;
   private readonly MAX_PHOTOS_PER_PROJECT = 2000;
   private readonly MAX_PROJECT_LOCAL_BYTES = Math.floor(2.5 * 1024 * 1024 * 1024);
+  private readonly TMP_USAGE_FILE = '.usage.json';
 
   private readonly sseClients = new Map<number, Response>();
 
@@ -261,6 +262,7 @@ export class ProjectsService {
 
     if (!files?.length) return clientKeyToStoredName;
 
+    let movedBytes = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const decodedOriginalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
@@ -286,11 +288,21 @@ export class ProjectsService {
         fs.writeFileSync(path.join(uploadPath, fallbackName), file.buffer!);
         clientKeyToStoredName[clientKey] = fallbackName;
         this.logger.log(`Сохранён файл: ${decodedOriginalName} -> ${fallbackName} (папка: ${subfolder})`);
+        movedBytes += Number(file.size) || 0;
         continue;
       }
 
       clientKeyToStoredName[clientKey] = storedName;
       this.logger.log(`Сохранён файл: ${decodedOriginalName} -> ${storedName} (папка: ${subfolder})`);
+      movedBytes += Number(file.size) || 0;
+    }
+
+    if (movedBytes > 0) {
+      try {
+        this.bumpTmpUsageBytes(projectId, movedBytes);
+      } catch {
+        // если не смогли записать usage — не ломаем сохранение, просто будет медленнее/неточнее
+      }
     }
 
     return clientKeyToStoredName;
@@ -300,7 +312,7 @@ export class ProjectsService {
     if (!incomingFiles?.length) return;
 
     const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
-    const currentBytes = this.safeDirSizeBytes(tmpDir);
+    const currentBytes = this.readTmpUsageBytes(projectId) ?? this.safeDirSizeBytes(tmpDir);
     const incomingBytes = incomingFiles.reduce((s, f) => s + (Number(f.size) || 0), 0);
     const nextBytes = currentBytes + incomingBytes;
 
@@ -321,6 +333,37 @@ export class ProjectsService {
       `Превышен лимит локального объёма фото для проекта: максимум ${maxGb} ГБ. ` +
         `Сейчас получилось бы ${nextGb} ГБ. Удалите часть фото и попробуйте снова.`,
     );
+  }
+
+  private usageFilePath(projectId: number) {
+    return path.join(process.cwd(), 'uploads', 'tmp', String(projectId), this.TMP_USAGE_FILE);
+  }
+
+  private readTmpUsageBytes(projectId: number): number | null {
+    try {
+      const p = this.usageFilePath(projectId);
+      if (!fs.existsSync(p)) return null;
+      const raw = fs.readFileSync(p, 'utf8');
+      const parsed = JSON.parse(raw) as { bytes?: unknown };
+      const bytes = Number((parsed as any)?.bytes);
+      return Number.isFinite(bytes) && bytes >= 0 ? bytes : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private bumpTmpUsageBytes(projectId: number, deltaBytes: number) {
+    const p = this.usageFilePath(projectId);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    const current = this.readTmpUsageBytes(projectId) ?? 0;
+    const next = Math.max(0, current + (Number(deltaBytes) || 0));
+    fs.writeFileSync(p, JSON.stringify({ bytes: next }), 'utf8');
+  }
+
+  async getProjectTmpUsage(projectId: number) {
+    const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
+    const usedBytes = this.readTmpUsageBytes(projectId) ?? this.safeDirSizeBytes(tmpDir);
+    return { usedBytes, maxBytes: this.MAX_PROJECT_LOCAL_BYTES };
   }
 
   private safeDirSizeBytes(dirPath: string): number {
@@ -951,6 +994,39 @@ export class ProjectsService {
 
   async deletePhotos(photoIds: number[]) {
     if (!photoIds?.length) return;
+    const photos = await this.prisma.projectPhoto.findMany({
+      where: { id: { in: photoIds } },
+      select: { id: true, projectId: true, defectId: true, section: true, filename: true, yandexPath: true },
+    });
+
+    // Удаляем локальные temp-файлы, если они ещё не выгружены на Яндекс
+    const freedBytesByProject = new Map<number, number>();
+    for (const p of photos) {
+      if (p.yandexPath) continue;
+      if (!p.filename) continue;
+      const subfolder = p.defectId ? `__defect__id__${p.defectId}` : (p.section ?? 'misc');
+      const filePath = path.join(process.cwd(), 'uploads', 'tmp', String(p.projectId), subfolder, p.filename);
+      try {
+        if (fs.existsSync(filePath)) {
+          const st = fs.statSync(filePath);
+          fs.unlinkSync(filePath);
+          freedBytesByProject.set(p.projectId, (freedBytesByProject.get(p.projectId) ?? 0) + st.size);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (freedBytesByProject.size) {
+      try {
+        for (const [projectId, bytes] of freedBytesByProject) {
+          this.bumpTmpUsageBytes(projectId, -bytes);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     return this.prisma.projectPhoto.deleteMany({ where: { id: { in: photoIds } } });
   }
 

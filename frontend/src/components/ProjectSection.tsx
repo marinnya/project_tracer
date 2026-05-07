@@ -128,8 +128,8 @@ function ProjectSection({
 
       <div className="file-row" onClick={() => inputRef.current?.click()}>
         <img src="/clip.png" alt="attach" />
-        <span className="desktop-only">Выберите файлы (максимальный размер до 15 Мб)</span>
-        <span className="mobile-only">Выберите файлы (до 15 Мб)</span>
+        <span className="desktop-only">Выберите файлы (максимальный размер до {MAX_PHOTO_FILE_LABEL})</span>
+        <span className="mobile-only">Выберите файлы (до {MAX_PHOTO_FILE_LABEL})</span>
       </div>
 
       {localError && <div className="inline-error">{localError}</div>}

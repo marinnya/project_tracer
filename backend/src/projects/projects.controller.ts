@@ -59,6 +59,11 @@ export class ProjectsController {
     return this.projectService.getDefects(projectId);
   }
 
+  @Get(':id/tmp-usage')
+  async getTmpUsage(@Param('id', ParseIntPipe) projectId: number) {
+    return this.projectService.getProjectTmpUsage(projectId);
+  }
+
   @Patch(':id/save')
   @UseInterceptors(
     FilesInterceptor('files', 200, {
