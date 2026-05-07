@@ -10,6 +10,7 @@ import api from "../utils/api";
 import { getApiErrorMessage } from "../utils/getApiErrorMessage";
 import { MAX_PAGES_PER_PROJECT } from "../constants/uploads";
 import { nextTempDefectId } from "../utils/tempDefectId";
+import { compressImageFile } from "../utils/compressImage";
 
 // Обновленный тип проекта под новую схему Prisma
 type Project = {
@@ -216,28 +217,6 @@ function ProjectPage({ onLogout }: Props) {
     return `${fileName}|||${globalIndex}`;
   };
 
-  const buildSectionPhotosMeta = (
-    fileKeys: string[],
-    sectionFileStartIndex: number,
-  ) => {
-    const meta: { section: string; originalName: string; clientKey: string; order: number }[] = [];
-    let keyIndex = sectionFileStartIndex;
-
-    for (const title of SECTIONS) {
-      const saved = savedPhotos
-        .filter(p => p.section === title)
-        .sort((a, b) => a.order - b.order);
-
-      saved.forEach(p => meta.push({ section: title, originalName: p.originalName, clientKey: '', order: p.order }));
-
-      sections[title].files.forEach((file, i) => {
-        meta.push({ section: title, originalName: file.name, clientKey: fileKeys[keyIndex++], order: saved.length + i + 1 });
-      });
-    }
-
-    return meta;
-  };
-
   const buildAllPhotosForUpload = () => {
     const meta: {
       originalName: string;
@@ -290,10 +269,42 @@ function ProjectPage({ onLogout }: Props) {
     setError(null);
 
     try {
+      // Сжимаем новые фото перед отправкой (чтобы быстрее грузилось и меньше занимало места)
+      // Важно: сохраняем исходные имена файлов, чтобы не ломать привязку/уникальность.
+      setUploadLabel("Подготовка фото...");
+
+      const compressedSections: Record<string, File[]> = {};
+      for (const title of SECTIONS) {
+        const src = sections[title].files;
+        if (!src.length) {
+          compressedSections[title] = src;
+          continue;
+        }
+        const out: File[] = [];
+        for (let i = 0; i < src.length; i++) {
+          out.push(await compressImageFile(src[i], { maxSide: 3000, jpegQuality: 0.9 }));
+        }
+        compressedSections[title] = out;
+      }
+
+      const compressedDefects: Record<number, File[]> = {};
+      for (const d of defects) {
+        const src = d.files;
+        if (!src.length) {
+          compressedDefects[d.id] = src;
+          continue;
+        }
+        const out: File[] = [];
+        for (let i = 0; i < src.length; i++) {
+          out.push(await compressImageFile(src[i], { maxSide: 3000, jpegQuality: 0.9 }));
+        }
+        compressedDefects[d.id] = out;
+      }
+
       // Быстрый прогноз: чтобы не грузить гигабайты по сети и получить отказ уже на сервере
       const incomingBytes =
-        SECTIONS.reduce((s, t) => s + sections[t].files.reduce((a, f) => a + f.size, 0), 0) +
-        defects.reduce((s, d) => s + d.files.reduce((a, f) => a + f.size, 0), 0);
+        SECTIONS.reduce((s, t) => s + (compressedSections[t] ?? []).reduce((a, f) => a + f.size, 0), 0) +
+        defects.reduce((s, d) => s + (compressedDefects[d.id] ?? []).reduce((a, f) => a + f.size, 0), 0);
       if (tmpUsage && (tmpUsage.usedBytes + incomingBytes > tmpUsage.maxBytes)) {
         const maxGb = (tmpUsage.maxBytes / 1024 / 1024 / 1024).toFixed(1);
         const nextGb = ((tmpUsage.usedBytes + incomingBytes) / 1024 / 1024 / 1024).toFixed(2);
@@ -303,6 +314,8 @@ function ProjectPage({ onLogout }: Props) {
         setError(msg);
         throw new Error(msg);
       }
+
+      setUploadLabel("Сохранение...");
 
       const sectionPagesSum = SECTIONS.reduce((s, t) => s + sections[t].pages, 0);
       const defectPagesSum = defects.reduce((s, d) => s + (Number(d.pages) || 0), 0);
@@ -359,7 +372,7 @@ function ProjectPage({ onLogout }: Props) {
         const saved = savedPhotos
           .filter(p => p.section === title)
           .sort((a, b) => a.order - b.order);
-        sections[title].files.forEach((file, i) => {
+        (compressedSections[title] ?? []).forEach((file, i) => {
           const clientKey = buildClientKey(file.name, globalIndex++);
           pendingUploads.push({
             file,
@@ -379,7 +392,7 @@ function ProjectPage({ onLogout }: Props) {
         const savedDef = savedDefects.find(sd => sd.id === d.id);
         const savedCount = savedDef?.photos.length ?? 0;
         const defectId = resolvedDefectId(d.id);
-        d.files.forEach((file, i) => {
+        (compressedDefects[d.id] ?? []).forEach((file, i) => {
           const clientKey = buildClientKey(file.name, globalIndex++);
           pendingUploads.push({
             file,
