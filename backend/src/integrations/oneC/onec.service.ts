@@ -105,7 +105,7 @@ export class OneCService {
     }));
   }
 
-  async sendProjectUpdate(projectId: number) {
+  /*async sendProjectUpdate(projectId: number) {
     const endpoint = process.env.ONEC_OUTGOING_URL;
     if (!endpoint) {
       this.logger.warn('ONEC_OUTGOING_URL не задан, отправка данных в 1С пропущена');
@@ -146,5 +146,5 @@ export class OneCService {
         },
       },
     );
-  }
+  }*/
 }
