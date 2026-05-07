@@ -489,6 +489,14 @@ input[type="checkbox"] {
   text-decoration: underline;
 }
 
+/* Мобильная версия: без gap, space-between */
+@media (max-width: 768px) {
+  .file-list-header {
+    justify-content: space-between;
+    gap: 0;
+  }
+}
+
 .file-item {
   display: flex;
   align-items: center;

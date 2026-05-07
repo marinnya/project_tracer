@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { User } from '@prisma/client';
@@ -47,7 +47,7 @@ type SaveDraftFilesBody = {
 };
 
 @Injectable()
-export class ProjectsService {
+export class ProjectsService implements OnModuleInit {
   private readonly logger = new Logger(ProjectsService.name);
   private readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk/resources';
   private readonly BATCH_SIZE = 10;
@@ -60,6 +60,9 @@ export class ProjectsService {
   private readonly MAX_PHOTOS_PER_PROJECT = 2000;
   private readonly MAX_PROJECT_LOCAL_BYTES = Math.floor(2.5 * 1024 * 1024 * 1024);
   private readonly TMP_USAGE_FILE = '.usage.json';
+  // Самый безопасный вариант: чистим ТОЛЬКО uploads/incoming и только очень старые файлы
+  private readonly INCOMING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 часа
+  private readonly INCOMING_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 час
 
   private readonly sseClients = new Map<number, Response>();
 
@@ -79,6 +82,58 @@ export class ProjectsService {
     private readonly prisma: PrismaService,
     private readonly oneCService: OneCService,
   ) {}
+
+  onModuleInit() {
+    // Авто-уборка мусора в uploads/incoming, который остаётся при обрывах загрузки
+    setInterval(() => {
+      try {
+        this.cleanupIncomingUploads();
+      } catch (e: unknown) {
+        this.logger.warn(`cleanupIncomingUploads failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }, this.INCOMING_CLEANUP_INTERVAL_MS);
+  }
+
+  private cleanupIncomingUploads() {
+    const base = path.join(process.cwd(), 'uploads', 'incoming');
+    if (!fs.existsSync(base)) return;
+
+    const now = Date.now();
+    const projectDirs = fs.readdirSync(base);
+    for (const projectDir of projectDirs) {
+      const fullProjectDir = path.join(base, projectDir);
+      let st: fs.Stats;
+      try {
+        st = fs.statSync(fullProjectDir);
+      } catch {
+        continue;
+      }
+      if (!st.isDirectory()) continue;
+
+      const entries = fs.readdirSync(fullProjectDir);
+      for (const entry of entries) {
+        const filePath = path.join(fullProjectDir, entry);
+        try {
+          const fst = fs.statSync(filePath);
+          if (!fst.isFile()) continue;
+          if (now - fst.mtimeMs > this.INCOMING_MAX_AGE_MS) {
+            fs.unlinkSync(filePath);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // если папка пустая — удаляем
+      try {
+        if (fs.readdirSync(fullProjectDir).length === 0) {
+          fs.rmdirSync(fullProjectDir);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   // ─── SSE ────────────────────────────────────────────────────────────────────
 

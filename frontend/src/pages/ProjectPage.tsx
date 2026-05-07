@@ -281,9 +281,7 @@ function ProjectPage({ onLogout }: Props) {
           continue;
         }
         const out: File[] = [];
-        for (let i = 0; i < src.length; i++) {
-          out.push(await compressImageFile(src[i], { maxSide: 3000, jpegQuality: 0.9 }));
-        }
+        for (let i = 0; i < src.length; i++) out.push(await compressImageFile(src[i]));
         compressedSections[title] = out;
       }
 
@@ -295,9 +293,7 @@ function ProjectPage({ onLogout }: Props) {
           continue;
         }
         const out: File[] = [];
-        for (let i = 0; i < src.length; i++) {
-          out.push(await compressImageFile(src[i], { maxSide: 3000, jpegQuality: 0.9 }));
-        }
+        for (let i = 0; i < src.length; i++) out.push(await compressImageFile(src[i]));
         compressedDefects[d.id] = out;
       }
 
@@ -443,6 +439,11 @@ function ProjectPage({ onLogout }: Props) {
       for (let i = 0; i < pendingUploads.length; i += CHUNK_SIZE) {
         const chunk = pendingUploads.slice(i, i + CHUNK_SIZE);
         await uploadChunkWithRetry(chunk);
+        // Двигаем прогресс "Сохранение..." (0..9), чтобы не висело без движения
+        const done = Math.min(i + chunk.length, pendingUploads.length);
+        const pct = pendingUploads.length === 0 ? 9 : Math.min(9, Math.round((done / pendingUploads.length) * 9));
+        setUploadProgress(pct);
+        setUploadLabel(`Сохранение... (${done}/${pendingUploads.length})`);
       }
 
       // обновим usage после успешной докачки
@@ -518,11 +519,7 @@ function ProjectPage({ onLogout }: Props) {
 
       const uploadMeta = buildAllPhotosForUpload();
 
-      const saveTimer = setInterval(() => {
-        setUploadProgress(prev => (prev < 9 ? prev + 1 : prev));
-      }, 150);
       await handleSave();
-      clearInterval(saveTimer);
       setUploadProgress(10);
       setUploadLabel("Загрузка на Яндекс.Диск...");
 

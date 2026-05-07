@@ -6,8 +6,10 @@ type CompressOptions = {
 };
 
 const DEFAULT_OPTS: CompressOptions = {
-  maxSide: 3000,
-  jpegQuality: 0.9,
+  // Ближе к "Telegram как фото": уменьшение до ~1280px и ощутимое сжатие.
+  // Для читаемости текста это агрессивно, но сильно ускоряет загрузку.
+  maxSide: 1280,
+  jpegQuality: 0.82,
 };
 
 function canCompress(file: File) {
