@@ -51,6 +51,8 @@ export class ProjectsService implements OnModuleInit {
   private readonly logger = new Logger(ProjectsService.name);
   private readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk/resources';
   private readonly BATCH_SIZE = 10;
+  /** Таймаут HTTP к API Яндекс.Диска (загрузка может быть долгой на слабом канале). */
+  private readonly YANDEX_HTTP_TIMEOUT_MS = 180_000;
   private readonly yandexRootFolder =
     process.env.YANDEX_ROOT_FOLDER ?? 'ТестБотПТО/ТестПриложения';
   private readonly MAX_PAGES_PER_SECTION = 300;
@@ -574,6 +576,16 @@ export class ProjectsService implements OnModuleInit {
     this.logger.log(`Всего фото в запросе: ${photos.length}`);
 
     const files = await this.readTempFiles(tmpDir, photosWithMeta);
+    const pendingLocalCount = photosWithMeta.filter((p) => !p.yandexPath).length;
+    if (files.length !== pendingLocalCount) {
+      this.logger.error(
+        `Несовпадение числа локальных файлов: ожидалось ${pendingLocalCount}, собрано ${files.length} (project ${projectId})`,
+      );
+      throw new InternalServerErrorException(
+        'Не удалось сопоставить список фото с файлами на сервере. Сохраните черновик ещё раз и повторите попытку.',
+      );
+    }
+
     this.logger.log(`Файлов для загрузки: ${files.length}`);
 
     const { folderUrl, renamedPhotos } = await this.uploadToYandex(
@@ -675,7 +687,7 @@ export class ProjectsService implements OnModuleInit {
       await axios.put(
         `${this.baseUrl}?path=${encodeURIComponent(folderPath)}`,
         undefined,
-        { headers: this.getHeaders() },
+        { headers: this.getHeaders(), timeout: this.YANDEX_HTTP_TIMEOUT_MS },
       );
     } catch (e: unknown) {
       const err = e as { response?: { status?: number }; message?: string };
@@ -701,12 +713,15 @@ export class ProjectsService implements OnModuleInit {
 
     const { data } = await axios.get(
       `${this.baseUrl}/upload?path=${filePath}&overwrite=true`,
-      { headers: this.getHeaders() },
+      { headers: this.getHeaders(), timeout: this.YANDEX_HTTP_TIMEOUT_MS },
     );
 
     const fileBuffer = file.buffer ?? fs.readFileSync(file.path!);
     await axios.put(data.href, fileBuffer, {
       headers: { 'Content-Type': file.mimetype },
+      timeout: this.YANDEX_HTTP_TIMEOUT_MS,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
     });
   }
 
@@ -714,9 +729,11 @@ export class ProjectsService implements OnModuleInit {
     const encodedPath = encodeURIComponent(folderName);
     await axios.put(`${this.baseUrl}/publish?path=${encodedPath}`, undefined, {
       headers: this.getHeaders(),
+      timeout: this.YANDEX_HTTP_TIMEOUT_MS,
     });
     const { data } = await axios.get(`${this.baseUrl}?path=${encodedPath}`, {
       headers: this.getHeaders(),
+      timeout: this.YANDEX_HTTP_TIMEOUT_MS,
     });
     return data.public_url;
   }
@@ -769,11 +786,24 @@ export class ProjectsService implements OnModuleInit {
       const resolvedPath = fs.existsSync(filePath) ? filePath : fallbackPath;
 
       if (!resolvedPath) {
+        const ctx =
+          photo.defectId != null
+            ? `дефект id ${photo.defectId}, тип: ${photo.defectTypeName ?? '—'}`
+            : `секция: ${photo.section ?? '—'}`;
         this.logger.warn(
-          `Файл не найден на диске, пропускаем: ${photo.originalName} ` +
-          `(storedName: ${fileName}, подпапка: ${subfolder})`,
+          `Файл не найден на диске: ${photo.originalName} (storedName: ${fileName}, ${ctx}, порядок: ${photo.order ?? '—'})`,
         );
-        continue;
+        throw new BadRequestException(
+          `Не найден локальный файл «${photo.originalName}» (${ctx}). ` +
+            `Сохраните черновик с фото ещё раз и повторите отправку на Яндекс.Диск.`,
+        );
+      }
+
+      if (!fs.existsSync(filePath) && fallbackPath) {
+        this.logger.warn(
+          `Файл «${photo.originalName}» найден по резервному пути (ожидалась подпапка ${subfolder}); ` +
+            `проверьте, что имена файлов на сервере не дублируются.`,
+        );
       }
 
       result.push({

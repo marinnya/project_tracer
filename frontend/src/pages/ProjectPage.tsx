@@ -273,7 +273,9 @@ function ProjectPage({ onLogout }: Props) {
     return meta;
   };
 
-  const handleSave = async () => {
+  /** `fileUploadProgressCap`: при «Записать» оставляем 0–10% под черновик, 10–100% даёт SSE Яндекса; при одном «Сохранить» — вся полоса 0–100%. */
+  const handleSave = async (opts?: { fileUploadProgressCap?: number }) => {
+    const fileProgressCap = opts?.fileUploadProgressCap ?? 100;
     setIsSaving(true);
     setError(null);
     setUploadProgress(0);
@@ -450,18 +452,23 @@ function ProjectPage({ onLogout }: Props) {
       };
 
       const saveStartMs = Date.now();
+      if (pendingUploads.length === 0) {
+        setUploadProgress(fileProgressCap);
+      }
       for (let i = 0; i < pendingUploads.length; i += CHUNK_SIZE) {
         const chunk = pendingUploads.slice(i, i + CHUNK_SIZE);
         await uploadChunkWithRetry(chunk);
-        // Двигаем прогресс "Сохранение..." (0..9), чтобы не висело без движения
         const done = Math.min(i + chunk.length, pendingUploads.length);
-        const pct = pendingUploads.length === 0 ? 9 : Math.min(9, Math.round((done / pendingUploads.length) * 9));
+        const pct = Math.min(
+          fileProgressCap,
+          Math.round((done / pendingUploads.length) * fileProgressCap),
+        );
         setUploadProgress(pct);
         const elapsed = Date.now() - saveStartMs;
         const perFile = done > 0 ? elapsed / done : 0;
         const remainingMs = (pendingUploads.length - done) * perFile;
         const eta = formatEta(remainingMs);
-        setUploadLabel(`Сохранение... (${done}/${pendingUploads.length})${eta ? `, осталось ~${eta}` : ""}`);
+        setUploadLabel(`Сохранение... (${done}/${pendingUploads.length})${eta ? `, осталось ${eta}` : ""}`);
       }
 
       // обновим usage после успешной докачки
@@ -537,7 +544,7 @@ function ProjectPage({ onLogout }: Props) {
 
       const uploadMeta = buildAllPhotosForUpload();
 
-      await handleSave();
+      await handleSave({ fileUploadProgressCap: 10 });
       setUploadProgress(10);
       setUploadLabel("Загрузка на Яндекс.Диск...");
 
@@ -547,6 +554,8 @@ function ProjectPage({ onLogout }: Props) {
         const sse = new EventSource(
           `${baseUrl}/projects/${id}/upload-progress?token=${token}`
         );
+
+        let yandexProgressAnchor: { t0: number; p0: number } | null = null;
 
         sse.onmessage = (event) => {
           const data = JSON.parse(event.data) as { percent: number; done: boolean };
@@ -560,9 +569,31 @@ function ProjectPage({ onLogout }: Props) {
           setUploadProgress(data.percent);
 
           if (data.done) {
+            setUploadLabel("Загрузка на Яндекс.Диск...");
             sse.close();
             resolve();
+            return;
           }
+
+          const p = data.percent;
+          let etaSuffix = "";
+          if (p >= 10 && p < 100) {
+            const now = Date.now();
+            if (yandexProgressAnchor === null) {
+              yandexProgressAnchor = { t0: now, p0: p };
+            }
+            const elapsed = now - yandexProgressAnchor.t0;
+            const deltaP = p - yandexProgressAnchor.p0;
+            if (deltaP >= 0.5 && elapsed >= 300) {
+              const speed = deltaP / elapsed;
+              if (speed > 0) {
+                const remainingMs = (100 - p) / speed;
+                const eta = formatEta(remainingMs);
+                if (eta) etaSuffix = `, осталось ${eta}`;
+              }
+            }
+          }
+          setUploadLabel(`Загрузка на Яндекс.Диск...${etaSuffix}`);
         };
 
         sse.onerror = () => {
