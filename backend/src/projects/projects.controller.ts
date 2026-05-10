@@ -11,6 +11,10 @@ import {
   UseGuards,
   Req,
   Res,
+  HttpCode,
+  HttpStatus,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
@@ -19,7 +23,7 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { Express } from 'express';
 import type { Response } from 'express';
-import { ProjectsService } from './projects.service';
+import { ProjectsService, PhotoMeta } from './projects.service';
 import { Logger } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -140,26 +144,50 @@ export class ProjectsController {
     return this.projectService.saveDraftFiles(projectId, files ?? [], body);
   }
 
+  /**
+   * Принимает задачу и сразу отвечает 202 — тяжёлая выгрузка идёт в фоне.
+   * Прогресс и успех/ошибка — только через SSE `/projects/:id/upload-progress`
+   * (`percent` до 100 и `done`, либо `percent: -1`).
+   */
   @Post(':id/upload')
+  @HttpCode(HttpStatus.ACCEPTED)
   async uploadFiles(
     @Param('id', ParseIntPipe) projectId: number,
     @Body() body: { projectName: string; photos: string },
   ) {
-    this.logger.log(`Загрузка файлов проекта ${projectId} на Яндекс.Диск`);
+    this.logger.log(`Запуск фоновой загрузки проекта ${projectId} на Яндекс.Диск`);
+
+    let photos: unknown;
     try {
-      const result = await this.projectService.uploadProjectFiles(
-        projectId,
-        body.projectName,
-        JSON.parse(body.photos),
-      );
-      this.projectService.sendProgress(projectId, 100, true);
-      return result;
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      this.logger.error(message);
-      this.projectService.sendProgress(projectId, -1, true);
-      throw e;
+      photos = JSON.parse(body.photos);
+    } catch {
+      throw new BadRequestException('Некорректный JSON в поле photos');
     }
+
+    if (!this.projectService.tryBeginYandexUpload(projectId)) {
+      throw new ConflictException(
+        'Загрузка этого проекта на Яндекс.Диск уже выполняется. Дождитесь завершения.',
+      );
+    }
+
+    void this.projectService
+      .uploadProjectFiles(projectId, body.projectName, photos as PhotoMeta[])
+      .then(() => {
+        this.projectService.sendProgress(projectId, 100, true);
+      })
+      .catch((e: unknown) => {
+        const message = e instanceof Error ? e.message : String(e);
+        this.logger.error(message);
+        this.projectService.sendProgress(projectId, -1, true);
+      })
+      .finally(() => {
+        this.projectService.endYandexUpload(projectId);
+      });
+
+    return {
+      accepted: true,
+      message: 'Загрузка запущена; следите за прогрессом в потоке событий.',
+    };
   }
 
   @Patch(':id/unarchive')

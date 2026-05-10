@@ -21,7 +21,7 @@ type UploadFile = {
   order?: number;
 };
 
-type PhotoMeta = {
+export type PhotoMeta = {
   originalName: string;
   section: string | null;
   defectId?: number;
@@ -67,6 +67,18 @@ export class ProjectsService implements OnModuleInit {
   private readonly INCOMING_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 час
 
   private readonly sseClients = new Map<number, Response>();
+  /** Один одновременный запуск выгрузки на Яндекс на проект (асинхронный POST /upload). */
+  private readonly yandexUploadInFlight = new Set<number>();
+
+  tryBeginYandexUpload(projectId: number): boolean {
+    if (this.yandexUploadInFlight.has(projectId)) return false;
+    this.yandexUploadInFlight.add(projectId);
+    return true;
+  }
+
+  endYandexUpload(projectId: number): void {
+    this.yandexUploadInFlight.delete(projectId);
+  }
 
   private readonly sectionKeyMap: Record<string, string> = {
     'Титульный лист': 'Титульный',

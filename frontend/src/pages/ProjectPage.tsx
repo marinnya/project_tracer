@@ -602,13 +602,11 @@ function ProjectPage({ onLogout }: Props) {
         };
 
         setTimeout(() => {
-          api.post(
-            `/projects/${id}/upload`,
-            {
-              projectName: project.name,
-              photos: JSON.stringify(uploadMeta),
-            },
-          ).catch(reject);
+          // Бэкенд отвечает 202 сразу; завершение и ошибки — только через SSE (ниже).
+          api.post(`/projects/${id}/upload`, {
+            projectName: project.name,
+            photos: JSON.stringify(uploadMeta),
+          }).catch(reject);
         }, 300);
       });
 
