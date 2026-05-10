@@ -5,13 +5,18 @@ type CompressOptions = {
   jpegQuality: number;
   /** Потолок размера после сжатия (~1.5–2 МБ) — для JPEG и для PNG после перевода в JPEG */
   targetMaxBytes: number;
+  /**
+   * Нижняя граница размера файла для JPEG после сжатия (байт): ниже — поднимаем качество.
+   * На очень маленьких кадрах цель может быть недостижима без увеличения maxSide.
+   */
+  minJpegBytes: number;
 };
 
 const DEFAULT_OPTS: CompressOptions = {
-  // Чуть меньше 1280 + целевой потолок ~2 МБ: меньше трафик и быстрее «Сохранить» на типичном интернете.
-  maxSide: 1152,
+  maxSide: 1280,
   jpegQuality: 0.74,
   targetMaxBytes: Math.floor(2 * 1024 * 1024),
+  minJpegBytes: Math.floor(500 * 1024),
 };
 
 function canCompress(file: File) {
@@ -44,6 +49,24 @@ async function encodeCanvasToTargetJpeg(
   return blob;
 }
 
+/**
+ * Поднимает качество JPEG с того же canvas, пока размер < minBytes (но не больше оригинала).
+ */
+async function raiseJpegToMinBytes(
+  canvas: HTMLCanvasElement,
+  minBytes: number,
+  originalFileSize: number,
+): Promise<Blob | null> {
+  let best: Blob | null = null;
+  for (const q of [0.78, 0.82, 0.85, 0.88, 0.9, 0.92, 0.94, 0.96, 0.98]) {
+    const b = await canvasToJpegBlob(canvas, q);
+    if (!b || b.size >= originalFileSize) continue;
+    if (!best || b.size > best.size) best = b;
+    if (b.size >= minBytes) return b;
+  }
+  return best;
+}
+
 /** PNG на сервер часто тяжёлее JPEG; сохраняем имя логичным для типа image/jpeg */
 function jpgFileName(originalName: string): string {
   if (/\.png$/i.test(originalName)) return originalName.replace(/\.png$/i, ".jpg");
@@ -53,7 +76,7 @@ function jpgFileName(originalName: string): string {
 }
 
 export async function compressImageFile(file: File, opts: Partial<CompressOptions> = {}): Promise<File> {
-  const { maxSide, jpegQuality, targetMaxBytes } = { ...DEFAULT_OPTS, ...opts };
+  const { maxSide, jpegQuality, targetMaxBytes, minJpegBytes } = { ...DEFAULT_OPTS, ...opts };
   if (!canCompress(file)) return file;
 
   try {
@@ -112,6 +135,11 @@ export async function compressImageFile(file: File, opts: Partial<CompressOption
     }
 
     if (!blob) return file;
+
+    if (outType === "image/jpeg" && blob.size < minJpegBytes) {
+      const raised = await raiseJpegToMinBytes(canvas, minJpegBytes, file.size);
+      if (raised) blob = raised;
+    }
 
     // Если стало больше — смысла нет, оставляем оригинал
     if (blob.size >= file.size) return file;
