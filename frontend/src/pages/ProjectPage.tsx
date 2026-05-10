@@ -401,6 +401,7 @@ function ProjectPage({ onLogout }: Props) {
       saveMetaFormData.append("defects", JSON.stringify(defectsData));
       saveMetaFormData.append("deletedPhotos", JSON.stringify(deletedPhotoIds));
 
+      setUploadLabel("Сохранение метаданных...");
       const saveRes = await api.patch(`/projects/${id}/save`, saveMetaFormData);
       const defectIdMap = (saveRes.data?.defectIdMap ?? {}) as Record<string, number>;
 
@@ -462,7 +463,13 @@ function ProjectPage({ onLogout }: Props) {
       // Важно: слишком большие multipart-запросы часто ловят 413 от nginx/прокси.
       // Меньше chunk => надёжнее загрузка, лучше UX на слабой сети.
       const CHUNK_SIZE = 10;
-      const uploadChunkWithRetry = async (chunk: PendingUpload[], retries = 3) => {
+      const saveStartMs = Date.now();
+
+      const uploadChunkWithRetry = async (
+        chunk: PendingUpload[],
+        chunkFirstIndex: number,
+        retries = 3,
+      ) => {
         const formData = new FormData();
         const fileToSection: Record<string, string> = {};
         const fileKeys: string[] = [];
@@ -482,9 +489,42 @@ function ProjectPage({ onLogout }: Props) {
         formData.append("sectionPhotos", JSON.stringify(sectionPhotos));
         formData.append("defectPhotos", JSON.stringify(defectPhotos));
 
+        const totalFiles = pendingUploads.length;
+        const bumpProgressFromUpload = (loaded: number, totalRequestBytes: number) => {
+          if (totalRequestBytes <= 0 || totalFiles <= 0) return;
+          const withinChunk = (loaded / totalRequestBytes) * chunk.length;
+          const virtualDone = chunkFirstIndex + withinChunk;
+          const pct = Math.min(
+            fileProgressCap,
+            prepPortion + Math.round((virtualDone / totalFiles) * uploadPortion),
+          );
+          setUploadProgress(pct);
+          const doneApprox = Math.min(totalFiles, Math.max(0, Math.floor(virtualDone)));
+          const elapsed = Date.now() - saveStartMs;
+          const perFile = virtualDone > 0 ? elapsed / virtualDone : 0;
+          const remainingMs = (totalFiles - virtualDone) * perFile;
+          const eta = formatEta(remainingMs);
+          setUploadLabel(
+            `Отправка на сервер (${doneApprox}/${totalFiles})${eta ? `, осталось ${eta}` : ""}...`,
+          );
+        };
+
         for (let attempt = 1; attempt <= retries; attempt++) {
           try {
-            await api.patch(`/projects/${id}/save-files`, formData);
+            await api.patch(`/projects/${id}/save-files`, formData, {
+              onUploadProgress: (ev) => {
+                const total = ev.total ?? 0;
+                if (total > 0) bumpProgressFromUpload(ev.loaded, total);
+              },
+            });
+            {
+              const vd = chunkFirstIndex + chunk.length;
+              const pctDone = Math.min(
+                fileProgressCap,
+                prepPortion + Math.round((vd / totalFiles) * uploadPortion),
+              );
+              setUploadProgress(pctDone);
+            }
             return;
           } catch (e) {
             if (attempt === retries) throw e;
@@ -493,13 +533,14 @@ function ProjectPage({ onLogout }: Props) {
         }
       };
 
-      const saveStartMs = Date.now();
       if (pendingUploads.length === 0) {
         setUploadProgress(fileProgressCap);
+      } else {
+        setUploadLabel(`Отправка на сервер (0/${pendingUploads.length})...`);
       }
       for (let i = 0; i < pendingUploads.length; i += CHUNK_SIZE) {
         const chunk = pendingUploads.slice(i, i + CHUNK_SIZE);
-        await uploadChunkWithRetry(chunk);
+        await uploadChunkWithRetry(chunk, i);
         const done = Math.min(i + chunk.length, pendingUploads.length);
         const pct =
           pendingUploads.length === 0

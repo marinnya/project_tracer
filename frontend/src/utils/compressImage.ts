@@ -1,23 +1,59 @@
 type CompressOptions = {
   /** Максимальная длина стороны (px) */
   maxSide: number;
-  /** Качество JPEG 0..1 */
+  /** Качество JPEG 0..1 (стартовое; при необходимости понижается до целевого размера) */
   jpegQuality: number;
+  /** Потолок размера после сжатия (~1.5–2 МБ) — для JPEG и для PNG после перевода в JPEG */
+  targetMaxBytes: number;
 };
 
 const DEFAULT_OPTS: CompressOptions = {
-  // Ближе к "Telegram как фото": уменьшение до ~1280px и ощутимое сжатие.
-  // Для читаемости текста это агрессивно, но сильно ускоряет загрузку.
-  maxSide: 1280,
-  jpegQuality: 0.82,
+  // Чуть меньше 1280 + целевой потолок ~2 МБ: меньше трафик и быстрее «Сохранить» на типичном интернете.
+  maxSide: 1152,
+  jpegQuality: 0.74,
+  targetMaxBytes: Math.floor(2 * 1024 * 1024),
 };
 
 function canCompress(file: File) {
   return file.type?.startsWith("image/");
 }
 
+function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((b) => resolve(b), "image/jpeg", quality);
+  });
+}
+
+async function encodeCanvasToTargetJpeg(
+  canvas: HTMLCanvasElement,
+  jpegQuality: number,
+  targetMaxBytes: number,
+): Promise<Blob | null> {
+  let q = jpegQuality;
+  let blob = await canvasToJpegBlob(canvas, q);
+  let guard = 0;
+  while (blob && blob.size > targetMaxBytes && q > 0.45 && guard < 12) {
+    guard++;
+    const nextQ = Math.max(0.45, q * 0.9 - 0.02);
+    if (nextQ >= q) break;
+    q = nextQ;
+    const next = await canvasToJpegBlob(canvas, q);
+    if (!next) break;
+    blob = next;
+  }
+  return blob;
+}
+
+/** PNG на сервер часто тяжёлее JPEG; сохраняем имя логичным для типа image/jpeg */
+function jpgFileName(originalName: string): string {
+  if (/\.png$/i.test(originalName)) return originalName.replace(/\.png$/i, ".jpg");
+  const dot = originalName.lastIndexOf(".");
+  if (dot <= 0) return `${originalName}.jpg`;
+  return `${originalName.slice(0, dot)}.jpg`;
+}
+
 export async function compressImageFile(file: File, opts: Partial<CompressOptions> = {}): Promise<File> {
-  const { maxSide, jpegQuality } = { ...DEFAULT_OPTS, ...opts };
+  const { maxSide, jpegQuality, targetMaxBytes } = { ...DEFAULT_OPTS, ...opts };
   if (!canCompress(file)) return file;
 
   try {
@@ -29,7 +65,7 @@ export async function compressImageFile(file: File, opts: Partial<CompressOption
     const targetH = Math.max(1, Math.round(height * scale));
 
     // Если размер уже небольшой — оставляем как есть (не делаем лишнюю перекодировку)
-    if (scale === 1 && file.size <= 2 * 1024 * 1024) {
+    if (scale === 1 && file.size <= targetMaxBytes) {
       bitmap.close();
       return file;
     }
@@ -43,26 +79,45 @@ export async function compressImageFile(file: File, opts: Partial<CompressOption
       return file;
     }
 
+    const isPng = file.type === "image/png";
+    // Прозрачность PNG при выводе в JPEG даёт артефакты; для типичных снимков/сканов — белый фон
+    if (isPng) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, targetW, targetH);
+    }
+
     ctx.drawImage(bitmap, 0, 0, targetW, targetH);
     bitmap.close();
 
-    const isPng = file.type === "image/png";
-    const mime = isPng ? "image/png" : "image/jpeg";
-    const blob: Blob | null = await new Promise((resolve) => {
-      if (mime === "image/png") {
-        canvas.toBlob((b) => resolve(b), mime);
+    let blob: Blob | null;
+    let outFileName = file.name;
+    let outType: string;
+
+    if (isPng) {
+      // Сначала пробуем PNG (мелкая графика/скриншоты иногда меньше); иначе — как JPEG с тем же потолком
+      const pngBlob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((b) => resolve(b), "image/png");
+      });
+      if (pngBlob && pngBlob.size <= targetMaxBytes && pngBlob.size < file.size) {
+        blob = pngBlob;
+        outType = "image/png";
       } else {
-        canvas.toBlob((b) => resolve(b), mime, jpegQuality);
+        blob = await encodeCanvasToTargetJpeg(canvas, jpegQuality, targetMaxBytes);
+        outFileName = jpgFileName(file.name);
+        outType = "image/jpeg";
       }
-    });
+    } else {
+      blob = await encodeCanvasToTargetJpeg(canvas, jpegQuality, targetMaxBytes);
+      outType = "image/jpeg";
+    }
 
     if (!blob) return file;
 
     // Если стало больше — смысла нет, оставляем оригинал
     if (blob.size >= file.size) return file;
 
-    return new File([blob], file.name, {
-      type: blob.type,
+    return new File([blob], outFileName, {
+      type: outType,
       lastModified: file.lastModified,
     });
   } catch {
