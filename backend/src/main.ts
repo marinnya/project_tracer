@@ -3,11 +3,10 @@ import { AppModule } from './app.module';
 import * as express from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Иначе сначала сработает встроенный парсер Nest (~100kb), а не наш лимит ниже.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
 
-  // Увеличиваем лимиты body-parser:
-  // при "Записать" фронт отправляет большой JSON (список фото/метаданных),
-  // и стандартный лимит (~100kb) даёт 413 Payload Too Large.
+  // «Записать»: большой JSON в теле POST /upload (photos).
   app.use(express.json({ limit: '5mb' }));
   app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
