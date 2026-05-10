@@ -284,30 +284,72 @@ function ProjectPage({ onLogout }: Props) {
     try {
       // Сжимаем новые фото перед отправкой (чтобы быстрее грузилось и меньше занимало места)
       // Важно: сохраняем исходные имена файлов, чтобы не ломать привязку/уникальность.
-      setUploadLabel("Подготовка фото...");
+      const totalToCompress =
+        SECTIONS.reduce((s, t) => s + sections[t].files.length, 0) +
+        defects.reduce((s, d) => s + d.files.length, 0);
+      // Доля полосы на сжатие (остальное — на сеть), иначе при 200+ фото долго висят на 0%
+      const prepPortion =
+        totalToCompress > 0 ? Math.max(1, Math.round(fileProgressCap * 0.35)) : 0;
+      const uploadPortion = fileProgressCap - prepPortion;
+      let compressDone = 0;
+      const bumpCompressProgress = async () => {
+        compressDone++;
+        if (totalToCompress > 0) {
+          const raw = Math.round((compressDone / totalToCompress) * prepPortion);
+          setUploadProgress(Math.min(prepPortion, Math.max(raw, compressDone > 0 ? 1 : 0)));
+          setUploadLabel(`Подготовка фото (${compressDone}/${totalToCompress})...`);
+          await new Promise<void>((r) => setTimeout(r, 0));
+        }
+      };
+
+      /** Параллельное сжатие (несколько canvas подряд): быстрее на ПК, без смены качества/размеров в compressImageFile. */
+      const COMPRESS_CONCURRENCY = 4;
+
+      type CompressTask =
+        | { kind: "section"; title: string; idx: number; file: File }
+        | { kind: "defect"; defectId: number; idx: number; file: File };
+
+      const compressTasks: CompressTask[] = [];
+      for (const title of SECTIONS) {
+        sections[title].files.forEach((file, idx) =>
+          compressTasks.push({ kind: "section", title, idx, file }),
+        );
+      }
+      for (const d of defects) {
+        d.files.forEach((file, idx) =>
+          compressTasks.push({ kind: "defect", defectId: d.id, idx, file }),
+        );
+      }
 
       const compressedSections: Record<string, File[]> = {};
       for (const title of SECTIONS) {
-        const src = sections[title].files;
-        if (!src.length) {
-          compressedSections[title] = src;
-          continue;
-        }
-        const out: File[] = [];
-        for (let i = 0; i < src.length; i++) out.push(await compressImageFile(src[i]));
-        compressedSections[title] = out;
+        const n = sections[title].files.length;
+        compressedSections[title] = n ? new Array<File>(n) : [];
       }
-
       const compressedDefects: Record<number, File[]> = {};
       for (const d of defects) {
-        const src = d.files;
-        if (!src.length) {
-          compressedDefects[d.id] = src;
-          continue;
-        }
-        const out: File[] = [];
-        for (let i = 0; i < src.length; i++) out.push(await compressImageFile(src[i]));
-        compressedDefects[d.id] = out;
+        const n = d.files.length;
+        compressedDefects[d.id] = n ? new Array<File>(n) : [];
+      }
+
+      if (compressTasks.length > 0) {
+        let nextCompressIndex = 0;
+        const worker = async () => {
+          while (true) {
+            const i = nextCompressIndex++;
+            if (i >= compressTasks.length) return;
+            const t = compressTasks[i];
+            const out = await compressImageFile(t.file);
+            if (t.kind === "section") {
+              compressedSections[t.title][t.idx] = out;
+            } else {
+              compressedDefects[t.defectId][t.idx] = out;
+            }
+            await bumpCompressProgress();
+          }
+        };
+        const poolSize = Math.min(COMPRESS_CONCURRENCY, compressTasks.length);
+        await Promise.all(Array.from({ length: poolSize }, () => worker()));
       }
 
       // Быстрый прогноз: чтобы не грузить гигабайты по сети и получить отказ уже на сервере
@@ -459,10 +501,14 @@ function ProjectPage({ onLogout }: Props) {
         const chunk = pendingUploads.slice(i, i + CHUNK_SIZE);
         await uploadChunkWithRetry(chunk);
         const done = Math.min(i + chunk.length, pendingUploads.length);
-        const pct = Math.min(
-          fileProgressCap,
-          Math.round((done / pendingUploads.length) * fileProgressCap),
-        );
+        const pct =
+          pendingUploads.length === 0
+            ? fileProgressCap
+            : Math.min(
+                fileProgressCap,
+                prepPortion +
+                  Math.round((done / pendingUploads.length) * uploadPortion),
+              );
         setUploadProgress(pct);
         const elapsed = Date.now() - saveStartMs;
         const perFile = done > 0 ? elapsed / done : 0;
