@@ -276,10 +276,12 @@ function ProjectPage({ onLogout }: Props) {
   /** `fileUploadProgressCap`: при «Записать» оставляем 0–10% под черновик, 10–100% даёт SSE Яндекса; при одном «Сохранить» — вся полоса 0–100%. */
   const handleSave = async (opts?: { fileUploadProgressCap?: number }) => {
     const fileProgressCap = opts?.fileUploadProgressCap ?? 100;
+    /** Единый префикс — без скачков «Сохранение» ↔ «Отправка на сервер». */
+    const saveCaption = "Сохранение черновика";
     setIsSaving(true);
     setError(null);
     setUploadProgress(0);
-    setUploadLabel("Сохранение...");
+    setUploadLabel(`${saveCaption}…`);
 
     try {
       // Сжимаем новые фото перед отправкой (чтобы быстрее грузилось и меньше занимало места)
@@ -297,7 +299,9 @@ function ProjectPage({ onLogout }: Props) {
         if (totalToCompress > 0) {
           const raw = Math.round((compressDone / totalToCompress) * prepPortion);
           setUploadProgress(Math.min(prepPortion, Math.max(raw, compressDone > 0 ? 1 : 0)));
-          setUploadLabel(`Подготовка фото (${compressDone}/${totalToCompress})...`);
+          setUploadLabel(
+            `${saveCaption}: подготовка фото (${compressDone}/${totalToCompress})…`,
+          );
           await new Promise<void>((r) => setTimeout(r, 0));
         }
       };
@@ -366,8 +370,6 @@ function ProjectPage({ onLogout }: Props) {
         throw new Error(msg);
       }
 
-      setUploadLabel("Сохранение...");
-
       const sectionPagesSum = SECTIONS.reduce((s, t) => s + sections[t].pages, 0);
       const defectPagesSum = defects.reduce((s, d) => s + (Number(d.pages) || 0), 0);
       const totalPagesDeclared = sectionPagesSum + defectPagesSum;
@@ -401,7 +403,7 @@ function ProjectPage({ onLogout }: Props) {
       saveMetaFormData.append("defects", JSON.stringify(defectsData));
       saveMetaFormData.append("deletedPhotos", JSON.stringify(deletedPhotoIds));
 
-      setUploadLabel("Сохранение метаданных...");
+      setUploadLabel(`${saveCaption}: метаданные…`);
       const saveRes = await api.patch(`/projects/${id}/save`, saveMetaFormData);
       const defectIdMap = (saveRes.data?.defectIdMap ?? {}) as Record<string, number>;
 
@@ -505,7 +507,7 @@ function ProjectPage({ onLogout }: Props) {
           const remainingMs = (totalFiles - virtualDone) * perFile;
           const eta = formatEta(remainingMs);
           setUploadLabel(
-            `Отправка на сервер (${doneApprox}/${totalFiles})${eta ? `, осталось ${eta}` : ""}...`,
+            `${saveCaption}: файлы (${doneApprox}/${totalFiles})${eta ? `, осталось ${eta}` : ""}…`,
           );
         };
 
@@ -536,7 +538,7 @@ function ProjectPage({ onLogout }: Props) {
       if (pendingUploads.length === 0) {
         setUploadProgress(fileProgressCap);
       } else {
-        setUploadLabel(`Отправка на сервер (0/${pendingUploads.length})...`);
+        setUploadLabel(`${saveCaption}: файлы (0/${pendingUploads.length})…`);
       }
       for (let i = 0; i < pendingUploads.length; i += CHUNK_SIZE) {
         const chunk = pendingUploads.slice(i, i + CHUNK_SIZE);
@@ -555,7 +557,9 @@ function ProjectPage({ onLogout }: Props) {
         const perFile = done > 0 ? elapsed / done : 0;
         const remainingMs = (pendingUploads.length - done) * perFile;
         const eta = formatEta(remainingMs);
-        setUploadLabel(`Сохранение... (${done}/${pendingUploads.length})${eta ? `, осталось ${eta}` : ""}`);
+        setUploadLabel(
+          `${saveCaption}: файлы (${done}/${pendingUploads.length})${eta ? `, осталось ${eta}` : ""}…`,
+        );
       }
 
       // обновим usage после успешной докачки
@@ -627,7 +631,7 @@ function ProjectPage({ onLogout }: Props) {
     try {
       setIsUploading(true);
       setUploadProgress(0);
-      setUploadLabel("Сохранение...");
+      setUploadLabel("Сохранение черновика…");
 
       const uploadMeta = buildAllPhotosForUpload();
 
