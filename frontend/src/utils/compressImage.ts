@@ -3,11 +3,11 @@ type CompressOptions = {
   maxSide: number;
   /** Качество JPEG 0..1 (стартовое; при необходимости понижается до targetMaxBytes) */
   jpegQuality: number;
-  /** Потолок размера после сжатия (~2 МБ) */
+  /** Потолок размера после сжатия (~1.5 МБ) */
   targetMaxBytes: number;
   /**
-   * Нижняя граница при сжатии (байт): не уменьшаем качество/шаг так, чтобы результат был меньше.
-   * Не применяется, если исходный файл уже меньше этого порога — тогда берём исходник как есть.
+   * Нижняя граница при сжатии (байт), если исходник не меньше этого порога.
+   * Не применяется, если исходный файл уже меньше — тогда берём исходник как есть.
    */
   minJpegBytes: number;
 };
@@ -15,9 +15,12 @@ type CompressOptions = {
 const DEFAULT_OPTS: CompressOptions = {
   maxSide: 1280,
   jpegQuality: 0.74,
-  targetMaxBytes: Math.floor(2 * 1024 * 1024),
+  targetMaxBytes: Math.floor(1.5 * 1024 * 1024),
   minJpegBytes: Math.floor(500 * 1024),
 };
+
+/** Минимальная длинная сторона при дополнительном уменьшении canvas */
+const MIN_CANVAS_LONG_SIDE = 280;
 
 function canCompress(file: File) {
   return file.type?.startsWith("image/");
@@ -29,41 +32,39 @@ function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<B
   });
 }
 
-/**
- * Жмём до targetMaxBytes, но не принимаем шаг, если размер ушёл ниже minJpegBytes.
- */
+/** Жмём качеством до targetMaxBytes (без остановки из‑за minJpegBytes). */
 async function encodeCanvasToTargetJpeg(
   canvas: HTMLCanvasElement,
   jpegQuality: number,
   targetMaxBytes: number,
-  minJpegBytes: number,
 ): Promise<Blob | null> {
   let q = jpegQuality;
   let blob = await canvasToJpegBlob(canvas, q);
   let guard = 0;
-  while (blob && blob.size > targetMaxBytes && q > 0.45 && guard < 12) {
+  const MIN_Q = 0.25;
+  while (blob && blob.size > targetMaxBytes && q > MIN_Q && guard < 28) {
     guard++;
-    const nextQ = Math.max(0.45, q * 0.9 - 0.02);
-    if (nextQ >= q) break;
+    const nextQ = Math.max(MIN_Q, q * 0.88 - 0.015);
+    if (nextQ >= q - 0.0005) break;
     const next = await canvasToJpegBlob(canvas, nextQ);
     if (!next) break;
-    if (next.size < minJpegBytes) break;
     q = nextQ;
     blob = next;
   }
   return blob;
 }
 
-/** Поднимаем качество, пока не достигнем minBytes (и меньше оригинала). */
-async function raiseJpegToMinBytes(
+/** Поднимаем качество, чтобы попасть в [minBytes, maxBytes] и остаться меньше оригинала. */
+async function raiseJpegToMinMax(
   canvas: HTMLCanvasElement,
   minBytes: number,
+  maxBytes: number,
   originalFileSize: number,
 ): Promise<Blob | null> {
-  for (const q of [0.76, 0.8, 0.84, 0.87, 0.9, 0.92, 0.94, 0.96, 0.98]) {
+  for (const q of [0.52, 0.56, 0.6, 0.64, 0.68, 0.72, 0.76, 0.8, 0.84, 0.87, 0.9, 0.92, 0.94, 0.96, 0.98]) {
     const b = await canvasToJpegBlob(canvas, q);
     if (!b || b.size >= originalFileSize) continue;
-    if (b.size >= minBytes) return b;
+    if (b.size >= minBytes && b.size <= maxBytes) return b;
   }
   return null;
 }
@@ -76,6 +77,20 @@ function jpgFileName(originalName: string): string {
   return `${originalName.slice(0, dot)}.jpg`;
 }
 
+function shrinkDimensions(w: number, h: number): { w: number; h: number } {
+  const long = Math.max(w, h);
+  if (long <= MIN_CANVAS_LONG_SIDE) return { w, h };
+  let nw = Math.max(1, Math.round(w * 0.86));
+  let nh = Math.max(1, Math.round(h * 0.86));
+  if (Math.max(nw, nh) < MIN_CANVAS_LONG_SIDE) {
+    const f = MIN_CANVAS_LONG_SIDE / long;
+    nw = Math.max(1, Math.round(w * f));
+    nh = Math.max(1, Math.round(h * f));
+  }
+  if (nw === w && nh === h) return { w, h };
+  return { w: nw, h: nh };
+}
+
 export async function compressImageFile(file: File, opts: Partial<CompressOptions> = {}): Promise<File> {
   const { maxSide, jpegQuality, targetMaxBytes, minJpegBytes } = { ...DEFAULT_OPTS, ...opts };
   if (!canCompress(file)) return file;
@@ -85,18 +100,16 @@ export async function compressImageFile(file: File, opts: Partial<CompressOption
 
     const bitmap = await createImageBitmap(file);
     const { width, height } = bitmap;
-    const scale = Math.min(1, maxSide / Math.max(width, height));
-    const targetW = Math.max(1, Math.round(width * scale));
-    const targetH = Math.max(1, Math.round(height * scale));
+    const baseScale = Math.min(1, maxSide / Math.max(width, height));
+    let w = Math.max(1, Math.round(width * baseScale));
+    let h = Math.max(1, Math.round(height * baseScale));
 
-    if (scale === 1 && file.size <= targetMaxBytes) {
+    if (baseScale === 1 && file.size <= targetMaxBytes) {
       bitmap.close();
       return file;
     }
 
     const canvas = document.createElement("canvas");
-    canvas.width = targetW;
-    canvas.height = targetH;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
       bitmap.close();
@@ -104,28 +117,35 @@ export async function compressImageFile(file: File, opts: Partial<CompressOption
     }
 
     const isPng = file.type === "image/png";
-    if (isPng) {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, targetW, targetH);
-    }
 
-    ctx.drawImage(bitmap, 0, 0, targetW, targetH);
-    bitmap.close();
+    const draw = () => {
+      canvas.width = w;
+      canvas.height = h;
+      if (isPng) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+      }
+      ctx.drawImage(bitmap, 0, 0, w, h);
+    };
 
-    let blob: Blob | null;
-    let outFileName = file.name;
-    let outType: string;
-
-    const toJpeg = async () => {
-      let b = await encodeCanvasToTargetJpeg(canvas, jpegQuality, targetMaxBytes, minJpegBytes);
-      if (b && b.size < minJpegBytes) {
-        const r = await raiseJpegToMinBytes(canvas, minJpegBytes, file.size);
+    const buildJpegBlob = async (): Promise<Blob | null> => {
+      let b = await encodeCanvasToTargetJpeg(canvas, jpegQuality, targetMaxBytes);
+      if (!b) return null;
+      if (b.size > targetMaxBytes) return null;
+      if (file.size >= minJpegBytes && b.size < minJpegBytes) {
+        const r = await raiseJpegToMinMax(canvas, minJpegBytes, targetMaxBytes, file.size);
         if (r) b = r;
       }
+      if (b.size > targetMaxBytes) return null;
       return b;
     };
 
+    let blob: Blob | null = null;
+    let outFileName = file.name;
+    let outType: string;
+
     if (isPng) {
+      draw();
       const pngBlob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob((b) => resolve(b), "image/png");
       });
@@ -139,18 +159,34 @@ export async function compressImageFile(file: File, opts: Partial<CompressOption
         blob = pngBlob;
         outType = "image/png";
       } else {
-        blob = await toJpeg();
         outFileName = jpgFileName(file.name);
         outType = "image/jpeg";
+        for (let attempt = 0; attempt < 8; attempt++) {
+          draw();
+          blob = await buildJpegBlob();
+          if (blob) break;
+          const next = shrinkDimensions(w, h);
+          if (next.w === w && next.h === h) break;
+          w = next.w;
+          h = next.h;
+        }
       }
     } else {
-      blob = await toJpeg();
       outType = "image/jpeg";
+      for (let attempt = 0; attempt < 8; attempt++) {
+        draw();
+        blob = await buildJpegBlob();
+        if (blob) break;
+        const next = shrinkDimensions(w, h);
+        if (next.w === w && next.h === h) break;
+        w = next.w;
+        h = next.h;
+      }
     }
 
-    if (!blob) return file;
+    bitmap.close();
 
-    if (file.size >= minJpegBytes && blob.size < minJpegBytes) return file;
+    if (!blob) return file;
 
     if (blob.size >= file.size) return file;
 
