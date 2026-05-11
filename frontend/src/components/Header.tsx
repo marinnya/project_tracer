@@ -71,7 +71,7 @@ function Header({
     <header className="topbar">
       <div className="topbar-inner">
         <Link to="/" className="logo">
-          <div className="logo-icon"><img src="/tracer.png"/></div>
+          <div className="logo-icon"><img src="/tracer.png" /></div>
           <div className="logo-text">
             <div className="logo-title">{title}</div>
             <div className="logo-subtitle">{subtitle}</div>

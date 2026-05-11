@@ -658,6 +658,6 @@ input[type="checkbox"] {
 /* Узкие экраны 320–333px: только селект «Количество страниц» у дефектов чуть уже */
 @media (max-width: 333px) {
   select.defect-pages-select {
-    max-width: 168px;
+    max-width: 54px;
   }
 }
