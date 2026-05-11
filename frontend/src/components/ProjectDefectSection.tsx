@@ -227,6 +227,7 @@ function ProjectDefectSection({
               <div className="section-row-defect">
                 <label>Количество страниц*</label>
                 <select
+                  className="defect-pages-select"
                   value={defect.pages}
                   onChange={e => updateDefect(defect.id, { pages: Number(e.target.value) || "" })}
                 >
@@ -251,7 +252,7 @@ function ProjectDefectSection({
 
               <label htmlFor={`defect-upload-desktop-${defect.id}`} className="file-row-defect">
                 <img src="/clip.png" alt="attach" />
-                <span>Выберите файлы</span>
+                <span>Выберите файлы (до {MAX_PHOTO_FILE_LABEL})</span>
               </label>
 
               {defects.length > 1 && (
@@ -293,6 +294,7 @@ function ProjectDefectSection({
                 </select>
 
                 <select
+                  className="defect-pages-select"
                   value={defect.pages}
                   onChange={e => updateDefect(defect.id, { pages: Number(e.target.value) || "" })}
                 >

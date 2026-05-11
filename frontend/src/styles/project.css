@@ -431,6 +431,7 @@ input[type="checkbox"] {
   border-radius: 8px;
   border: 1px solid #ddd;
   font-size: 14px;
+  max-width: 192px;
 }
 
 .meta-top {
@@ -651,5 +652,12 @@ input[type="checkbox"] {
   .section-row-defect,
   .section-row {
     flex-wrap: nowrap;
+  }
+}
+
+/* Узкие экраны 320–333px: только селект «Количество страниц» у дефектов чуть уже */
+@media (max-width: 333px) {
+  select.defect-pages-select {
+    max-width: 168px;
   }
 }
