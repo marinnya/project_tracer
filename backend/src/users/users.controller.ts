@@ -16,24 +16,26 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard) // JwtAuthGuard проверяет токен, RolesGuard проверяет роль
 export class UsersController {
   constructor(
     private usersService: UsersService,
-    private oneCService: OneCService, // добавили OneCService
+    private oneCService: OneCService,
   ) {}
 
   // получение сотрудников из БД для выпадающего списка в AddModal
-  @Roles(Role.ADMIN)
+  @Roles(Role.ADMIN) // декоратор показывает что маршрут доступен только для админа
+  // GET /users/onec-employees
   @Get('onec-employees') // должен быть ДО @Get(), @Patch(':id') и т.д.
   async getOneCEmployees() {
-    return this.oneCService.getEmployeesForSelect();
+    return this.oneCService.getEmployeesForSelect(); // возвращает список сотрудников из 1С для выпадающего списка в AddModal
   }
 
   @Roles(Role.ADMIN)
   @Post()
   async create(
     @Body()
+    // Достаёт тело запроса и типизирует его
     dto: {
       firstName: string;
       lastName: string;
@@ -43,10 +45,11 @@ export class UsersController {
       oneCId?: string;
     },
   ) {
-    console.log('CONTROLLER DTO RECEIVED:', dto); // <--- это первый лог
-    return this.usersService.create(dto);
+    console.log('CONTROLLER DTO RECEIVED:', dto); // лог
+    return this.usersService.create(dto); // Передаёт данные в сервис, который создаст юзера в БД
   }
 
+  // Возвращает список всех сотрудников для таблицы в админке
   @Roles(Role.ADMIN)
   @Get()
   getEmployees() {
@@ -54,19 +57,8 @@ export class UsersController {
   }
 
   @Roles(Role.ADMIN)
-  @Patch(':id/login')
-  changeLogin(@Param('id') id: string, @Body('login') login: string) {
-    return this.usersService.changeLogin(id, login);
-  }
-
-  @Roles(Role.ADMIN)
-  @Patch(':id/password')
-  changePassword(@Param('id') id: string, @Body('password') password: string) {
-    return this.usersService.changePassword(id, password);
-  }
-
-  @Roles(Role.ADMIN)
   @Patch(':id/block')
+  // Достаёт булево значение — true заблокировать, false разблокировать
   block(@Param('id') id: string, @Body('value') value: boolean) {
     return this.usersService.blockUser(id, value);
   }
@@ -74,13 +66,14 @@ export class UsersController {
   @Roles(Role.ADMIN)
   @Delete(':id')
   delete(@Param('id') id: string) {
-    return this.usersService.deleteUser(id);
+    return this.usersService.deleteUser(id); // удаляет юзера по id
   }
 
   @Roles(Role.ADMIN)
   @Patch(':id')
+  // оба поля необязательные - можно передать одно или оба
   update(@Param('id') id: string, @Body() body: { login?: string; password?: string }) {
-    return this.usersService.updateUser(id, body);
+    return this.usersService.updateUser(id, body); // универсальное обновление юзера
   }
 
 }

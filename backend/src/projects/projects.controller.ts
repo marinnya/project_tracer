@@ -31,38 +31,45 @@ import { Roles } from '../common/decorators/roles.decorator';
 
 @Controller('projects')
 export class ProjectsController {
-  private readonly logger = new Logger(ProjectsController.name);
+  private readonly logger = new Logger(ProjectsController.name); // создаем логгер
 
-  constructor(private readonly projectService: ProjectsService) {}
+  constructor(private readonly projectService: ProjectsService) {} // внедряем сервис
 
   // SSE-эндпоинт для отслеживания прогресса загрузки на Яндекс.Диск
   @Get(':id/upload-progress')
   uploadProgress(
-    @Param('id', ParseIntPipe) projectId: number,
+    @Param('id', ParseIntPipe) projectId: number, // id проекта из URL, ParseIntPipe автоматически преобразует строку из URL в число
+    // Берёт объект ответа напрямую - нужно чтобы держать соединение открытым и слать данные по частям
     @Res() res: Response,
   ) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
+    // Три заголовка которые переводят HTTP в режим SSE - браузер понимает что соединение не закроется сразу, а будет слать события
+    res.setHeader('Content-Type', 'text/event-stream'); // указываем что будет отправляться в формате event-stream
+    res.setHeader('Cache-Control', 'no-cache'); // отключаем кэширование
+    res.setHeader('Connection', 'keep-alive'); // указываем что соединение должно оставаться открытым
+    res.flushHeaders(); // Немедленно отправляет заголовки клиенту не дожидаясь тела - браузер сразу знает что соединение установлено
 
+    // Передаёт res в сервис -  тот сохраняет его и потом пишет в него прогресс через res.write()
     this.projectService.registerSseClient(projectId, res);
 
+    // Когда пользователь закрыл вкладку или ушёл - соединение закрывается, сервис удаляет клиента чтобы не держать мёртвые объекты в памяти
     res.on('close', () => {
       this.projectService.removeSseClient(projectId);
     });
   }
 
+  // возвращает фотографии проекта
   @Get(':id/photos')
   async getPhotos(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getProjectPhotos(projectId);
   }
 
+  // возвращает дефекты проекта
   @Get(':id/defects')
   async getDefects(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getDefects(projectId);
   }
 
+  // возвращает сколько места занимают временные файлы проекта
   @Get(':id/tmp-usage')
   async getTmpUsage(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getProjectTmpUsage(projectId);
@@ -85,14 +92,14 @@ export class ProjectsController {
         },
       }),
       limits: {
-        fileSize: 10 * 1024 * 1024,
-        files: 200,
+        fileSize: 10 * 1024 * 1024, // 10MB на файл
+        files: 200, // максимум 200 файлов
       },
     }),
   )
   async saveDraft(
     @Param('id', ParseIntPipe) projectId: number,
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles() files: Express.Multer.File[], // Достаёт загруженные файлы — multer уже сохранил их на диск, здесь просто метаданные (путь, имя, размер)
     @Body()
     body: {
       sections: string;
@@ -190,6 +197,7 @@ export class ProjectsController {
     };
   }
 
+  // разархивирует проект
   @Patch(':id/unarchive')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
@@ -197,17 +205,20 @@ export class ProjectsController {
     return this.projectService.unarchiveProject(projectId);
   }
 
+  // возвращает список проектов для текущего пользователя
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   async getAll(@Req() req: { user: { id: string; role: string } }) {
     return this.projectService.getProjectsForUser(req.user as never);
   }
 
+  // возвращает проект по id
   @Get(':id')
   async getOne(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getProjectById(projectId);
   }
 
+  // обновляет даты проекта, можно передать null чтобы сбросить дату
   @Patch(':id/dates')
   async updateDates(
     @Param('id', ParseIntPipe) projectId: number,
@@ -216,6 +227,7 @@ export class ProjectsController {
     return this.projectService.updateDates(projectId, body.startDate, body.endDate);
   }
 
+  // возвращает черновик проекта
   @Get(':id/draft')
   async getDraft(@Param('id', ParseIntPipe) projectId: number) {
     return this.projectService.getDraft(projectId);

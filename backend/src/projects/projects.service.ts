@@ -10,51 +10,61 @@ import { Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 
+// Файл в памяти/на диске при загрузке на Яндекс (multer кладёт path, readTempFiles читает с диска)
 type UploadFile = {
-  originalname: string;
-  buffer?: Buffer;
-  path?: string;
-  mimetype: string;
-  section?: string | null;
-  defectId?: number;
-  defectTypeName?: string;
-  order?: number;
+  originalname: string; // имя под которым пользователь грузит
+  buffer?: Buffer; // буфер в памяти, если memoryStorage (либо path, либо buffer)
+  path?: string; // путь на диске, если diskStorage
+  // Метаданные, которые добавляются вручную после того как multer принял файл
+  mimetype: string; // mime-тип файла (image/jpeg), нужен для загрузки на Яндекс в заголовке Content-Type
+  section?: string | null; // секция, если секционные фото
+  defectId?: number; // id дефекта, если дефектные фото
+  defectTypeName?: string; // тип дефекта, если дефектные фото
+  order?: number; // порядок фото, если секционные фото
 };
 
+// Метаданные одного фото из тела запроса (не от multer) «отправить на Яндекс» (секция, дефект, порядок)
 export type PhotoMeta = {
-  originalName: string;
-  section: string | null;
+  originalName: string; // оригинальное имя
+  section: string | null; // секция, если секционные фото (если дефект null)
   defectId?: number;
   defectTypeName?: string;
-  order: number;
-  yandexPath?: string | null;
+  order: number; // порядок фото внутри секции или дефекта
+  yandexPath?: string | null; // null пока не загружено на Яндекс (по этому полю определяем надо ли гразить или уже там)
 };
 
+// Тело PATCH /projects/:id/save — JSON-поля приходят строками из multipart
 type SaveDraftBody = {
+  // JSON-строки
   sections: string;
   sectionPhotos: string;
   defects: string;
-  deletedPhotos?: string;
-  fileToSection?: string;
-  fileKeys?: string;
+
+  deletedPhotos?: string; // список id фото, которые пользователь удалил
+  fileToSection?: string; // JSON-словарь { clientKey: секция } — говорит в какую секцию положить каждый файл
+  fileKeys?: string; // JSON-массив ключей файлов — фронт присваивает каждому файлу уникальный ключ чтобы сопоставить с метаданными. Порядок совпадает с порядком файлов в запросе
 };
 
+// Тело PATCH /projects/:id/save-files — только файлы и привязки (после save с defectIdMap)
 type SaveDraftFilesBody = {
   fileToSection?: string;
   fileKeys?: string;
-  sectionPhotos?: string;
-  defectPhotos?: string;
+  sectionPhotos?: string; // метаданные секционных фото - секция, имя, порядок. необ., тк могут быть только фото дефектов
+  defectPhotos?: string; // метаданные дефектных фото - дефектId, имя, порядок
 };
 
 @Injectable()
 export class ProjectsService implements OnModuleInit {
   private readonly logger = new Logger(ProjectsService.name);
+  // Базовый URL API Яндекс.Диска
   private readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk/resources';
-  private readonly BATCH_SIZE = 10;
-  /** Таймаут HTTP к API Яндекс.Диска (загрузка может быть долгой на слабом канале). */
+  private readonly BATCH_SIZE = 10; // размер пачки файлов для загрузки (параллельно)
+  // 3 минуты таймаут на один HTTP-запрос к Яндексу — на слабом канале большой файл может грузиться долго
   private readonly YANDEX_HTTP_TIMEOUT_MS = 180_000;
   private readonly yandexRootFolder =
     process.env.YANDEX_ROOT_FOLDER ?? 'ТестБотПТО/ТестПриложения';
+  
+  // Лимиты — 300 страниц на раздел, 2000 фото на проект, 2.5ГБ на диске
   private readonly MAX_PAGES_PER_SECTION = 300;
   private readonly MAX_PAGES_PER_DEFECT = 300;
   private readonly MAX_PHOTOS_PER_SECTION = 300;
@@ -62,24 +72,29 @@ export class ProjectsService implements OnModuleInit {
   private readonly MAX_PHOTOS_PER_PROJECT = 2000;
   private readonly MAX_PROJECT_LOCAL_BYTES = Math.floor(2.5 * 1024 * 1024 * 1024);
   private readonly TMP_USAGE_FILE = '.usage.json';
-  // Самый безопасный вариант: чистим ТОЛЬКО uploads/incoming и только очень старые файлы
+  // Временные файлы в uploads/incoming живут максимум 24 часа, чистятся каждый час
   private readonly INCOMING_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 часа
   private readonly INCOMING_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 час
 
+  // Map для хранения соединений SSE для каждого проекта, чтобы слать прогресс (словарь id проекта - SSE-соединение)
   private readonly sseClients = new Map<number, Response>();
   /** Один одновременный запуск выгрузки на Яндекс на проект (асинхронный POST /upload). */
   private readonly yandexUploadInFlight = new Set<number>();
 
+  // если загрузка уже идёт (Set содержит projectId) возвращает false, иначе добавляет в Set и возвращает true
   tryBeginYandexUpload(projectId: number): boolean {
     if (this.yandexUploadInFlight.has(projectId)) return false;
     this.yandexUploadInFlight.add(projectId);
     return true;
   }
 
+  // Убирает проект из Set — загрузка завершена (успешно или с ошибкой)
+  // Вызывается в .finally() в контроллере, поэтому выполняется всегда
   endYandexUpload(projectId: number): void {
     this.yandexUploadInFlight.delete(projectId);
   }
 
+  // Сопоставление полных названий разделов с короткими 
   private readonly sectionKeyMap: Record<string, string> = {
     'Титульный лист': 'Титульный',
     'Технические данные объекта контроля': 'Техданные',
@@ -92,14 +107,16 @@ export class ProjectsService implements OnModuleInit {
     'Дополнительная информация': 'Допинфо',
   };
 
+  // NestJS инжектит сервисы Prisma и OneC
   constructor(
     private readonly prisma: PrismaService,
     private readonly oneCService: OneCService,
   ) {}
 
+  // NestJS вызывает onModuleInit при старте — запускает таймер уборки мусора каждый час
   onModuleInit() {
     // Авто-уборка мусора в uploads/incoming, который остаётся при обрывах загрузки
-    setInterval(() => {
+    setInterval(() => { // запускает функцию каждые INCOMING_CLEANUP_INTERVAL_MS (1 час)
       try {
         this.cleanupIncomingUploads();
       } catch (e: unknown) {
@@ -109,27 +126,34 @@ export class ProjectsService implements OnModuleInit {
   }
 
   private cleanupIncomingUploads() {
+    // process.cwd() — корневая папка запущенного приложения. Если incoming не существует — выходим сразу
     const base = path.join(process.cwd(), 'uploads', 'incoming');
-    if (!fs.existsSync(base)) return;
+    if (!fs.existsSync(base)) return; // Если папки нет вообще — выходим, нечего чистить
 
     const now = Date.now();
+    // Читает содержимое папки incoming — получает массив имён (['1', '2', '15', ...])
     const projectDirs = fs.readdirSync(base);
+    // Перебирает папки проектов внутри incoming
     for (const projectDir of projectDirs) {
       const fullProjectDir = path.join(base, projectDir);
       let st: fs.Stats;
       try {
-        st = fs.statSync(fullProjectDir);
+        st = fs.statSync(fullProjectDir); // получаем информацию о папке/файле
       } catch {
         continue;
       }
+      // Пропускает если это файл а не папка — в incoming должны быть только папки проектов
       if (!st.isDirectory()) continue;
 
+      // читает содержимое папки проекта и перебирает файлы внутри
       const entries = fs.readdirSync(fullProjectDir);
       for (const entry of entries) {
         const filePath = path.join(fullProjectDir, entry);
         try {
           const fst = fs.statSync(filePath);
-          if (!fst.isFile()) continue;
+          if (!fst.isFile()) continue; // пропускает если это не файл
+          // mtimeMs — время последнего изменения файла. Если прошло больше 24 часов — удаляет файл
+          // Это файлы от прерванных загрузок — multer записал но сервер упал до того как файл переместили в tmp
           if (now - fst.mtimeMs > this.INCOMING_MAX_AGE_MS) {
             fs.unlinkSync(filePath);
           }
@@ -138,10 +162,10 @@ export class ProjectsService implements OnModuleInit {
         }
       }
 
-      // если папка пустая — удаляем
+      // после удаления файлов пречитывает папку: если она пустая — удаляем и ее
       try {
         if (fs.readdirSync(fullProjectDir).length === 0) {
-          fs.rmdirSync(fullProjectDir);
+          fs.rmdirSync(fullProjectDir); // удаляет только пустые папки
         }
       } catch {
         // ignore
@@ -149,37 +173,49 @@ export class ProjectsService implements OnModuleInit {
     }
   }
 
-  // ─── SSE ────────────────────────────────────────────────────────────────────
-
+  // SSE-методы
+  // Сохраняет объект ответа — через него потом будут слаться события
   registerSseClient(projectId: number, res: Response) {
+    // Сохраняет объект res в Map по ключу projectId
+    // res — открытое HTTP-соединение из контроллера, через него можно писать данные клиенту пока соединение живо
     this.sseClients.set(projectId, res);
   }
 
   removeSseClient(projectId: number) {
+    // Убирает объект res из Map по ключу projectId (когда клиент отключился, чтобы не накапливать лишние соединения)
     this.sseClients.delete(projectId);
   }
 
+  // Шлёт на фронт процент загрузки на Яндекс (формат Server-Sent Events)
   sendProgress(projectId: number, percent: number, done = false) {
-    const client = this.sseClients.get(projectId);
-    if (!client) return;
+    const client = this.sseClients.get(projectId); // ищет соединение по projectId
+    if (!client) return; // если нет соединения, то клиент уже отключился, выходим
+    // Пишет одно SSE-сообщение в открытое соединение
+    // JSON.stringify превращает объект в строку: data: {"percent":42,"done":false}
     client.write(`data: ${JSON.stringify({ percent, done })}\n\n`);
     if (done) {
-      client.end();
-      this.sseClients.delete(projectId);
+      client.end(); // закрывает соединение
+      this.sseClients.delete(projectId); // удаляет соединение из Map
     }
   }
 
-  // ─── SAVE DRAFT ─────────────────────────────────────────────────────────────
+  // SAVE DRAFT
 
-  // Вся логика сохранения черновика перенесена из контроллера сюда
+  /**
+   * Первый этап сохранения черновика (PATCH /save).
+   * Секции, дефекты, удаления, при необходимости — файлы в одном запросе.
+   * Фронт чаще шлёт сюда только метаданные, файлы — отдельными пачками на /save-files.
+   * Возвращает defectIdMap: временный отрицательный id дефекта → реальный id в БД.
+   */
   async saveDraft(
     projectId: number,
     files: Express.Multer.File[],
     body: SaveDraftBody,
   ) {
     this.enforceProjectLocalStorageLimit(projectId, files);
-    this.validateDraftLimits(body);
+    this.validateDraftLimits(body); // лимиты страниц и числа фото в этом запросе
 
+    // multer сохранил файлы в uploads/incoming — переносим в uploads/tmp/{projectId}/...
     const clientKeyToStoredName = this.persistIncomingFiles(
       projectId,
       files,
@@ -216,8 +252,10 @@ export class ProjectsService implements OnModuleInit {
 
     const defectIdMap = await this.saveDefects(projectId, defects);
 
+    // Фото дефектов, пришедшие вместе с save (если фронт не разбивал на save-files)
     for (const d of defects) {
       if (!d.newPhotos?.length) continue;
+      // id > 0 — уже в БД; отрицательный id — новый дефект, подставляем из defectIdMap
       const savedDefectId = d.id && d.id > 0 ? d.id : (d.id ? defectIdMap[d.id] : undefined);
       if (!savedDefectId) continue;
 
@@ -251,6 +289,10 @@ export class ProjectsService implements OnModuleInit {
     return { message: 'Черновик сохранён', defectIdMap };
   }
 
+  /**
+   * Второй этап: только файлы (PATCH /save-files), пачками с фронта.
+   * К этому моменту дефекты уже имеют реальные id в БД (после save).
+   */
   async saveDraftFiles(
     projectId: number,
     files: Express.Multer.File[],
@@ -289,6 +331,7 @@ export class ProjectsService implements OnModuleInit {
         clientKey: string;
         order: number;
       }[];
+      // Отрицательные id с фронта сюда не должны попадать — только после save
       const INT32_MAX = 2147483647;
       for (const p of defectPhotos) {
         const defectId = Number(p.defectId);
@@ -298,6 +341,7 @@ export class ProjectsService implements OnModuleInit {
           );
         }
       }
+      // Группируем по defectId — saveTempDefectPhotos вызываем отдельно на каждый дефект
       const byDefect = new Map<number, { originalName: string; storedName: string | null; order: number }[]>();
       for (const p of defectPhotos) {
         const defectId = Number(p.defectId);
@@ -317,6 +361,11 @@ export class ProjectsService implements OnModuleInit {
     return { message: 'Файлы черновика сохранены' };
   }
 
+  /**
+   * Переносит файлы из uploads/incoming/{projectId} в uploads/tmp/{projectId}/{subfolder}/.
+   * clientKey — стабильный ключ с фронта; storedName — uuid-имя на диске.
+   * Возвращает словарь clientKey → storedName для записи в projectPhoto.filename.
+   */
   private persistIncomingFiles(
     projectId: number,
     files: Express.Multer.File[],
@@ -334,8 +383,10 @@ export class ProjectsService implements OnModuleInit {
     let movedBytes = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      // multer отдаёт originalname в latin1 — декодируем в utf8 для кириллицы
       const decodedOriginalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
       const clientKey = fileKeys[i] ?? decodedOriginalName;
+      // subfolder = название секции или __defect__id__{id} для дефектов
       const subfolder = fileToSection[clientKey] ?? 'misc';
       const storedName = path.basename(file.filename ?? '');
       if (!storedName) continue;
@@ -377,6 +428,7 @@ export class ProjectsService implements OnModuleInit {
     return clientKeyToStoredName;
   }
 
+  // Не даём забить диск: сумма tmp проекта + новые файлы не больше MAX_PROJECT_LOCAL_BYTES
   private enforceProjectLocalStorageLimit(projectId: number, incomingFiles: Express.Multer.File[]) {
     if (!incomingFiles?.length) return;
 
@@ -404,6 +456,7 @@ export class ProjectsService implements OnModuleInit {
     );
   }
 
+  // Кэш объёма в .usage.json — быстрее, чем каждый раз обходить дерево tmp
   private usageFilePath(projectId: number) {
     return path.join(process.cwd(), 'uploads', 'tmp', String(projectId), this.TMP_USAGE_FILE);
   }
@@ -429,6 +482,7 @@ export class ProjectsService implements OnModuleInit {
     fs.writeFileSync(p, JSON.stringify({ bytes: next }), 'utf8');
   }
 
+  // Для фронта: сколько занято локально по проекту и какой потолок (2.5 ГБ)
   async getProjectTmpUsage(projectId: number) {
     const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
     const usedBytes = this.readTmpUsageBytes(projectId) ?? this.safeDirSizeBytes(tmpDir);
@@ -456,6 +510,7 @@ export class ProjectsService implements OnModuleInit {
     return total;
   }
 
+  // Лимиты для PATCH /save: страницы по секциям/дефектам и фото в этом же запросе
   private validateDraftLimits(body: SaveDraftBody) {
     const sections = JSON.parse(body.sections ?? '{}') as Record<string, { pages: number }>;
     const defects = JSON.parse(body.defects ?? '[]') as Array<{ pages: number | string }>;
@@ -502,6 +557,7 @@ export class ProjectsService implements OnModuleInit {
     }
   }
 
+  // Лимиты для одной пачки PATCH /save-files (не больше 300 фото на секцию/дефект за запрос)
   private validateDraftFileBatchLimits(body: SaveDraftFilesBody) {
     const sectionPhotos = JSON.parse(body.sectionPhotos ?? '[]') as Array<{ section: string }>;
     const defectPhotos = JSON.parse(body.defectPhotos ?? '[]') as Array<{ defectId: number }>;
@@ -535,7 +591,10 @@ export class ProjectsService implements OnModuleInit {
 
   // ─── UPLOAD TO YANDEX ───────────────────────────────────────────────────────
 
-  // Вся логика загрузки перенесена из контроллера сюда
+  /**
+   * Полный цикл «отправить проект на Яндекс.Диск»:
+   * сопоставить метаданные с БД → прочитать tmp → uploadToYandex → записать yandexPath → архив → удалить tmp.
+   */
   async uploadProjectFiles(
     projectId: number,
     projectName: string,
@@ -587,6 +646,7 @@ export class ProjectsService implements OnModuleInit {
     const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
     this.logger.log(`Всего фото в запросе: ${photos.length}`);
 
+    // Только фото без yandexPath — уже выгруженные на Диск повторно не трогаем
     const files = await this.readTempFiles(tmpDir, photosWithMeta);
     const pendingLocalCount = photosWithMeta.filter((p) => !p.yandexPath).length;
     if (files.length !== pendingLocalCount) {
@@ -636,9 +696,10 @@ export class ProjectsService implements OnModuleInit {
         };
       });
 
+    // Секционные фото: перезаписываем все записи разделов (не дефекты) актуальными путями
     await this.savePhotos(projectId, sectionPhotosWithPath);
 
-    // Обновляем пути для фото дефектов
+    // Фото дефектов: только update yandexPath/filename по id (записи уже есть после черновика)
     const defectPhotoUpdates = photos
       .filter((p) => p.section === 'Дефекты')
       .flatMap((p) => {
@@ -661,6 +722,7 @@ export class ProjectsService implements OnModuleInit {
     await this.saveDefectPhotoYandexPaths(defectPhotoUpdates);
     await this.finalizeProject(projectId, folderUrl);
 
+    // После успешной выгрузки локальные копии больше не нужны
     if (fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -670,10 +732,12 @@ export class ProjectsService implements OnModuleInit {
 
   // ─── YANDEX DISK ────────────────────────────────────────────────────────────
 
+  // Заголовок OAuth для всех запросов к cloud-api.yandex.net
   private getHeaders() {
     return { Authorization: `OAuth ${process.env.YANDEX_TOKEN}` };
   }
 
+  // Имя файла на Диске: короткий префикс секции или тип дефекта + порядковый номер (001, 002…)
   private getRenamedFilename(
     originalName: string,
     section: string | null,
@@ -694,6 +758,7 @@ export class ProjectsService implements OnModuleInit {
     return `${capitalizeFirst(prefix)}${orderStr}.${ext}`;
   }
 
+  // PUT /resources — создать папку; 409 = уже существует, не ошибка
   private async createFolder(folderPath: string): Promise<void> {
     try {
       await axios.put(
@@ -708,6 +773,7 @@ export class ProjectsService implements OnModuleInit {
     }
   }
 
+  // Создаёт цепочку вложенных папок: A → A/B → A/B/C
   private async ensureFolderPath(folderPath: string): Promise<void> {
     const normalized = folderPath.replace(/^\/+|\/+$/g, '');
     if (!normalized) return;
@@ -719,6 +785,7 @@ export class ProjectsService implements OnModuleInit {
     }
   }
 
+  // Двухшаговая загрузка Яндекса: GET upload URL → PUT тела файла по href
   private async uploadFile(file: UploadFile, folderPath: string): Promise<void> {
     const filename = Buffer.from(file.originalname, 'latin1').toString('utf8');
     const filePath = `${encodeURIComponent(folderPath)}/${encodeURIComponent(filename)}`;
@@ -737,6 +804,7 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
+  // Публикует папку проекта и возвращает public_url для ссылки в интерфейсе
   private async getPublicUrl(folderName: string): Promise<string> {
     const encodedPath = encodeURIComponent(folderName);
     await axios.put(`${this.baseUrl}/publish?path=${encodedPath}`, undefined, {
@@ -755,6 +823,11 @@ export class ProjectsService implements OnModuleInit {
     return `${this.yandexRootFolder}/${projectName}`;
   }
 
+  /**
+   * Собирает UploadFile[] для фото, ещё не на Яндексе.
+   * Ищет файл в uploads/tmp/{projectId}/{section|__defect__id__}/storedName;
+   * при отсутствии — резервный поиск по имени файла во всём дереве tmp.
+   */
   async readTempFiles(
     tmpDir: string,
     photos: {
@@ -833,6 +906,10 @@ export class ProjectsService implements OnModuleInit {
     return result;
   }
 
+  /**
+   * Загрузка на Диск пачками по BATCH_SIZE (параллельно внутри пачки).
+   * Уже выгруженные (yandexPath) только попадают в renamedPhotos без повторной upload.
+   */
   async uploadToYandex(
     files: UploadFile[],
     projectName: string,
@@ -937,8 +1014,8 @@ export class ProjectsService implements OnModuleInit {
     return { message: 'Файлы успешно загружены', folderUrl, renamedPhotos };
   }
 
-  // ─── PHOTOS & DEFECTS ───────────────────────────────────────────────────────
-
+  // PHOTOS & DEFECTS
+  // Фото секций проекта (defectId = null), не дефекты
   async getProjectPhotos(projectId: number) {
     return this.prisma.projectPhoto.findMany({
       where: { projectId, defectId: null },
@@ -946,6 +1023,8 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
+  // Дефекты с вложенными фото и именем типа для отображения на фронте
+  // Один запрос тянет дефект + все его фото + тип дефекта (include)
   async getDefects(projectId: number) {
     const defects = await this.prisma.defect.findMany({
       where: { projectId },
@@ -961,6 +1040,11 @@ export class ProjectsService implements OnModuleInit {
     }));
   }
 
+  /**
+   * Синхронизирует список дефектов проекта с телом черновика.
+   * Удаляет отсутствующие в запросе, обновляет существующие, создаёт новые.
+   * Отрицательный id с фронта — временный; в tempToSavedIdMap возвращаем реальный id.
+   */
   async saveDefects(
     projectId: number,
     defects: { id?: number; typeId: number; pages: number }[],
@@ -973,15 +1057,21 @@ export class ProjectsService implements OnModuleInit {
       if (seenTypeIds.has(typeId)) {
         throw new BadRequestException('Нельзя добавить два дефекта с одинаковым типом');
       }
-      seenTypeIds.add(typeId);
+      seenTypeIds.add(typeId); // добавляет тип в множество
     }
 
+    // Загружает все текущие дефекты проекта из БД
     const existing = await this.prisma.defect.findMany({ where: { projectId } });
+    // Собирает реальные ID из входящих дефектов. d.id > 0 — отрицательные это временные ID новых дефектов с фронта, они не считаются
     const incomingIds = new Set(defects.filter((d) => d.id && d.id > 0).map((d) => d.id!));
+    // Находит дефекты которые есть в БД но не пришли от фронта — значит пользователь их удалил
     const toDeleteIds = existing.filter((d) => !incomingIds.has(d.id)).map((d) => d.id);
+    // Словарь временныйId → реальныйId — фронт использует отрицательные числа как временные ID для новых дефектов, после сохранения нужно вернуть им реальные
     const tempToSavedIdMap: Record<number, number> = {};
 
+
     await this.prisma.$transaction(async (tx) => {
+      // Удаляет дефекты которые не пришли от фронта
       if (toDeleteIds.length) {
         await tx.projectPhoto.deleteMany({ where: { defectId: { in: toDeleteIds } } });
         await tx.defect.deleteMany({ where: { id: { in: toDeleteIds } } });
@@ -990,9 +1080,13 @@ export class ProjectsService implements OnModuleInit {
       for (const d of defects) {
         const typeId = Number(d.typeId);
         const pages = Number(d.pages);
+        // пропускает мусорные данные не ломая транзакцию
         if (!Number.isInteger(typeId) || typeId <= 0) continue;
         if (!Number.isInteger(pages) || pages <= 0) continue;
 
+        // Три случая: ID положительный и существует в БД - обновляет.
+        // ID отрицательный - создаёт новый и запоминает маппинг. 
+        // ID не задан вообще - просто создаёт без маппинга
         if (d.id && d.id > 0 && existing.some((e) => e.id === d.id)) {
           await tx.defect.update({ where: { id: d.id }, data: { typeId, pages } });
         } else {
@@ -1007,22 +1101,29 @@ export class ProjectsService implements OnModuleInit {
     return tempToSavedIdMap;
   }
 
+  // Добавляет записи projectPhoto для секций (yandexPath пока null) — без дублей по filename
   async saveTempPhotos(
     projectId: number,
     photos: { section: string; originalName: string; storedName: string | null; order: number }[],
   ) {
+    // Фильтрует фото которые есть в storedName (нет имени файла на диске - не надо сохранять)
     const newPhotos = photos.filter((p) => p.storedName);
     if (!newPhotos.length) return;
 
+    // Создаёт записи projectPhoto для секций (yandexPath пока null) - без дублей по filename
     await this.prisma.$transaction(async (tx) => {
       const existing = await tx.projectPhoto.findMany({
         where: { projectId, defectId: null },
         select: { filename: true },
       });
       const existingNames = new Set(existing.map((p) => p.filename).filter(Boolean));
+      // Исключает дубли — если файл с таким именем уже записан в БД, не создаёт повторно
+      // Ранний выход если все фото уже есть
       const toCreate = newPhotos.filter((p) => !existingNames.has(p.storedName));
       if (!toCreate.length) return;
 
+      // createMany — один INSERT для всех фото вместо отдельного на каждое. 
+      // yandexPath: null — файл пока только на диске, на Яндекс ещё не загружен
       await tx.projectPhoto.createMany({
         data: toCreate.map((p) => ({
           projectId, section: p.section, originalName: p.originalName,
@@ -1032,6 +1133,7 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
+  // То же для фото дефекта — привязка к defectId
   async saveTempDefectPhotos(
     defectId: number,
     projectId: number,
@@ -1049,6 +1151,7 @@ export class ProjectsService implements OnModuleInit {
       const toCreate = newPhotos.filter((p) => !existingNames.has(p.storedName));
       if (!toCreate.length) return;
 
+      // свзяывам фото с конкретным дефектом
       await tx.projectPhoto.createMany({
         data: toCreate.map((p) => ({
           projectId, defectId, originalName: p.originalName,
@@ -1058,6 +1161,7 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
+  // После Яндекса: полная замена секционных фото проекта (deleteMany + createMany)
   async savePhotos(
     projectId: number,
     photos: {
@@ -1075,10 +1179,14 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
+  // Обновляет только пути на Диске у уже существующих фото дефектов
   async saveDefectPhotoYandexPaths(
     updates: { id: number; yandexPath: string; filename: string }[],
   ) {
-    if (!updates.length) return;
+    if (!updates.length) return; // не идем в БД, если обновлять нечего - выходим
+    // Передаёт в транзакцию массив операций а не колбэк
+    // Все update выполняются параллельно внутри одной транзакции
+    // Обновляет только два поля
     await this.prisma.$transaction(
       updates.map((u) =>
         this.prisma.projectPhoto.update({
@@ -1089,24 +1197,31 @@ export class ProjectsService implements OnModuleInit {
     );
   }
 
+  // Удаление из БД + локальный tmp-файл, если ещё не выгружен на Яндекс (уменьшаем .usage.json)
   async deletePhotos(photoIds: number[]) {
+    // ?.length — защита если передали null или undefined вместо массива
     if (!photoIds?.length) return;
+    // Сначала загружает метаданные — нужны чтобы найти и удалить файлы на диске перед удалением из БД
     const photos = await this.prisma.projectPhoto.findMany({
       where: { id: { in: photoIds } },
       select: { id: true, projectId: true, defectId: true, section: true, filename: true, yandexPath: true },
     });
 
     // Удаляем локальные temp-файлы, если они ещё не выгружены на Яндекс
+    // Накапливает сколько байт освободилось по каждому проекту — чтобы потом одним вызовом обновить счётчик (id проекта - сколько байт освободилось)
     const freedBytesByProject = new Map<number, number>();
     for (const p of photos) {
-      if (p.yandexPath) continue;
-      if (!p.filename) continue;
+      if (p.yandexPath) continue; // Файл уже на Яндексе — локальная копия не существует, нечего удалять
+      if (!p.filename) continue; // Нет имени файла - не надо удалять
+
+      // Восстанавливает путь к файлу — дефектные фото лежат в __defect__id__123, секционные в папке с именем секции
       const subfolder = p.defectId ? `__defect__id__${p.defectId}` : (p.section ?? 'misc');
       const filePath = path.join(process.cwd(), 'uploads', 'tmp', String(p.projectId), subfolder, p.filename);
       try {
+        // Сначала читает размер файла, потом удаляет
         if (fs.existsSync(filePath)) {
-          const st = fs.statSync(filePath);
-          fs.unlinkSync(filePath);
+          const st = fs.statSync(filePath); // читаем размер файла
+          fs.unlinkSync(filePath); // удаляем файл
           freedBytesByProject.set(p.projectId, (freedBytesByProject.get(p.projectId) ?? 0) + st.size);
         }
       } catch {
@@ -1117,18 +1232,19 @@ export class ProjectsService implements OnModuleInit {
     if (freedBytesByProject.size) {
       try {
         for (const [projectId, bytes] of freedBytesByProject) {
-          this.bumpTmpUsageBytes(projectId, -bytes);
+          this.bumpTmpUsageBytes(projectId, -bytes); // Отрицательный delta — уменьшает счётчик на освобождённые байты
         }
       } catch {
         // ignore
       }
     }
 
+    // Удаляет из БД одним запросом все фото сразу — в самом конце, после успешной очистки диска
     return this.prisma.projectPhoto.deleteMany({ where: { id: { in: photoIds } } });
   }
 
-  // ─── PROJECTS ───────────────────────────────────────────────────────────────
-
+  // PROJECTS
+  // Возвращает проект по id (с данными ответственного)
   async getProjectById(projectId: number) {
     return this.prisma.project.findUnique({
       where: { id: projectId },
@@ -1136,6 +1252,7 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
+  // Возвращает все проекты (с данными ответственного), от новых к старым
   async getAllProjects() {
     const projects = await this.prisma.project.findMany({
       orderBy: { createdAt: 'desc' },
@@ -1149,6 +1266,7 @@ export class ProjectsService implements OnModuleInit {
     }));
   }
 
+  // Список для дашборда: админ — все проекты, сотрудник — только где он ответственный
   async getProjectsForUser(user: User) {
     const include = {
       responsibleUser: { select: { firstName: true, lastName: true } },
@@ -1177,25 +1295,28 @@ export class ProjectsService implements OnModuleInit {
     }));
   }
 
+  // Обновляет даты проекта, можно передать null чтобы сбросить дату
   async updateDates(projectId: number, startDate: string | null, endDate: string | null) {
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
-        startDate: startDate ? new Date(startDate) : null,
+        startDate: startDate ? new Date(startDate) : null, // если передали строку конвертирует в объект Date
         endDate: endDate ? new Date(endDate) : null,
       },
     });
   }
 
+  // После успешной выгрузки на Яндекс: ссылка на папку, статус «Завершен», дата архивации
   async finalizeProject(projectId: number, folderUrl: string) {
     await this.prisma.$transaction(async (tx) => {
       await tx.project.update({
         where: { id: projectId },
-        data: { folderUrl, status: 'Завершен', archivedAt: new Date() },
+        data: { folderUrl, status: 'Завершен', archivedAt: new Date() }, // обновляем 3 поля
       });
     });
   }
 
+  // Ручной перевод в архив без выгрузки на Яндекс
   async archiveProject(projectId: number) {
     return this.prisma.project.update({
       where: { id: projectId },
@@ -1203,6 +1324,7 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
+  // Вернуть из архива в «В работе», удаляет дату архивации
   async unarchiveProject(projectId: number) {
     return this.prisma.project.update({
       where: { id: projectId },
@@ -1210,6 +1332,9 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
+  // Черновик «сколько страниц» по каждой секции
+  // upsert — если черновик для этого проекта уже есть обновляет sections, если нет — создаёт новую запись
+  // sections хранится как JSON-поле в БД
   async saveDraftSections(
     projectId: number,
     sectionsState: Record<string, { pages: number }>,
@@ -1221,20 +1346,24 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
+  // Возвращает черновик проекта
+  // ?.sections — если черновика нет draft будет null
   async getDraft(projectId: number) {
     const draft = await this.prisma.projectDraft.findUnique({ where: { projectId } });
     return draft?.sections ?? null;
   }
 
+  // Физическое удаление из БД проектов, в архиве дольше 3 месяцев
   async deleteOldArchivedProjects() {
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    return this.prisma.project.deleteMany({ where: { archivedAt: { lt: threeMonthsAgo } } });
+    const threeMonthsAgo = new Date(); // текущая дата
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3); // вычитаем 3 месяца
+    return this.prisma.project.deleteMany({ where: { archivedAt: { lt: threeMonthsAgo } } }); // удаляем проекты у которых archivedAt меньше 3 месяцев
   }
 
+  // Cron: раз в сутки автоматически удаляет проекты находящиеся в архиве больше 3 месяцев
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleOldArchivedProjects() {
-    const deleted = await this.deleteOldArchivedProjects();
+    const deleted = await this.deleteOldArchivedProjects(); 
     this.logger.log(`Удалено старых архивных проектов: ${deleted.count}`);
   }
 }

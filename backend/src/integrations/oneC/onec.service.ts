@@ -1,6 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import axios from 'axios';
 
 export type OneCProject = {
   id: string;
@@ -24,8 +23,6 @@ export type OneCDefectType = {
 
 @Injectable()
 export class OneCService {
-  private readonly logger = new Logger(OneCService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   async syncAndReturnData(
@@ -33,8 +30,13 @@ export class OneCService {
     employees: OneCEmployee[],
     defectTypes: OneCDefectType[],
   ) {
+
+    // Оборачивает все операции в одну транзакцию
+    // Если что-то упадёт на середине — все изменения откатятся
+    // tx — это тот же Prisma-клиент, но внутри транзакции, все запросы идут через него
     await this.prisma.$transaction(async (tx) => {
-      // 1. Синхронизируем типы дефектов
+      // Синхронизируем типы дефектов
+      // upsert - если запись с таким oneCId уже есть - обновляет name, нет - создаёт новую
       for (const dt of defectTypes) {
         await tx.defectType.upsert({
           where: { oneCId: dt.id },
@@ -43,7 +45,7 @@ export class OneCService {
         });
       }
 
-      // 2. Синхронизируем сотрудников (User)
+      // Синхронизируем сотрудников
       for (const emp of employees) {
         await tx.user.upsert({
           where: { oneCId: emp.id },
@@ -52,15 +54,16 @@ export class OneCService {
             oneCId: emp.id,
             firstName: emp.firstName,
             lastName: emp.lastName,
-            login: `onec_${emp.id}`,
-            passwordHash: 'external_auth',
+            login: `onec_${emp.id}`, // технический юзер
+            passwordHash: 'external_auth', // заглушка пароля
             role: 'EMPLOYEE',
           },
         });
       }
 
-      // 3. Синхронизируем проекты
+      // Синхронизируем проекты
       for (const p of projects) {
+        // Ищет юзера по oneCId ответственного из 1С - чтобы привязать реальный id из БД к проекту
         const user = p.responsibleId 
           ? await tx.user.findUnique({ where: { oneCId: p.responsibleId } }) 
           : null;
@@ -86,15 +89,18 @@ export class OneCService {
       }
     });
 
+    // После транзакции возвращает актуальный список проектов с дефектами - за пределами транзакции, обычным клиентом
     return this.prisma.project.findMany({
       include: { defects: true }
     });
   }
 
+  // Все типы дефектов отсортированные по алфавиту - для выпадающего списка на фронте
   async getDefectTypesForSelect() {
     return this.prisma.defectType.findMany({ orderBy: { name: 'asc' } });
   }
 
+  // Только юзеры привязанные к 1С - у которых есть oneCId
   async getEmployeesForSelect() {
     const users = await this.prisma.user.findMany({ where: { oneCId: { not: null } } });
     return users.map((u) => ({
@@ -104,52 +110,4 @@ export class OneCService {
       displayName: `${u.lastName} ${u.firstName}`.trim(),
     }));
   }
-
-  // Сейчас это заглушка: если потребуется, можно включить отправку в 1С обратно.
-  async sendProjectUpdate(_projectId: number) {
-    return;
-  }
-
-  /*async sendProjectUpdate(projectId: number) {
-    const endpoint = process.env.ONEC_OUTGOING_URL;
-    if (!endpoint) {
-      this.logger.warn('ONEC_OUTGOING_URL не задан, отправка данных в 1С пропущена');
-      return;
-    }
-
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-      include: {
-        defects: {
-          select: {
-            id: true,
-            typeId: true,
-            pages: true,
-          },
-        },
-      },
-    });
-
-    if (!project) {
-      this.logger.warn(`Проект ${projectId} не найден, отправка в 1С пропущена`);
-      return;
-    }
-
-    await axios.post(
-      endpoint,
-      {
-        projectId: project.oneCId ?? String(project.id),
-        status: project.status,
-        archivedAt: project.archivedAt,
-        defects: project.defects,
-      },
-      {
-        headers: {
-          Authorization: process.env.ONEC_OUTGOING_TOKEN
-            ? `Bearer ${process.env.ONEC_OUTGOING_TOKEN}`
-            : undefined,
-        },
-      },
-    );
-  }*/
 }

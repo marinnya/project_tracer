@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { Role } from '@prisma/client';
 
+// проверка логина на длину и символы (null, если все ок)
 const validateLogin = (login: string): string | null => {
   if (login.length < 5) return 'Логин должен содержать не менее 5 символов';
   if (!/^[a-zA-Z0-9_]+$/.test(login))
@@ -10,6 +11,7 @@ const validateLogin = (login: string): string | null => {
   return null;
 };
 
+// проверка пароля на длину и символы (true/false)
 const validatePassword = (password: string): boolean => {
   return (
     password.length >= 8 &&
@@ -52,7 +54,9 @@ export class UsersService {
       throw new BadRequestException(PASSWORD_ERROR);
     }
 
+    // хешируем пароль до записи в БД
     const hash = await bcrypt.hash(data.password, 10);
+    // преобразуем строку роли в enum Role
     const roleEnum: Role =
       data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
 
@@ -76,9 +80,8 @@ export class UsersService {
           throw new BadRequestException('Логин уже занят');
         }
 
-        // обновляем пользователя и сбрасываем deletedAt —
-        // это ключевое исправление: при повторном добавлении удалённого сотрудника
-        // он снова становится активным
+        // обновляем пользователя и сбрасываем deletedAt
+        // при повторном добавлении удалённого сотрудника он снова становится активным
         const user = await this.prisma.user.update({
           where: { oneCId: data.oneCId },
           data: {
@@ -92,12 +95,13 @@ export class UsersService {
           },
         });
 
+        // привязываем к нему все проекты, где этот сотрудник был ответственным
         await this.prisma.project.updateMany({
           where: { oneCResponsibleId: user.oneCId! },
           data: { responsibleId: user.id },
         });
 
-        return user;
+        return user; // возвращаем обновленного пользователя
       }
     }
 
@@ -126,25 +130,10 @@ export class UsersService {
   async findAllEmployees() {
     return this.prisma.user.findMany({
       where: {
-        role: Role.EMPLOYEE,
-        deletedAt: null,
-        NOT: { login: { startsWith: 'onec_' } },
+        role: Role.EMPLOYEE, // только сотрудники
+        deletedAt: null, // только не удалённые
+        NOT: { login: { startsWith: 'onec_' } }, // исключаем еще не добавленныхсотрудников из 1С
       },
-    });
-  }
-
-  async changeLogin(userId: string, newLogin: string) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: { login: newLogin },
-    });
-  }
-
-  async changePassword(userId: string, newPassword: string) {
-    const hash = await bcrypt.hash(newPassword, 10);
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash: hash },
     });
   }
 
@@ -155,6 +144,7 @@ export class UsersService {
     });
   }
 
+  // Мягкое удаление — проставляет текущую дату вместо физического удаления из БД
   async deleteUser(userId: string) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -162,6 +152,7 @@ export class UsersService {
     });
   }
 
+  // Используется при логине - удалённый юзер войти не сможет
   async findByLogin(login: string) {
     return this.prisma.user.findFirst({
       where: {
@@ -171,8 +162,12 @@ export class UsersService {
     });
   }
 
+  // Обновление юзера - изменение логина/пароля
   async updateUser(userId: string, data: { login?: string; password?: string }) {
+    // Partial делает все поля необязательными
     const updateData: Partial<{ login: string; passwordHash: string }> = {};
+
+    // Добавляем в updateData только переданные поля
 
     if (data.login) {
       const loginError = validateLogin(data.login);
@@ -200,6 +195,7 @@ export class UsersService {
       updateData.passwordHash = await bcrypt.hash(data.password, 10);
     }
 
+    // Обновляет только то, что собрали в updateData
     return this.prisma.user.update({
       where: { id: userId },
       data: updateData,
