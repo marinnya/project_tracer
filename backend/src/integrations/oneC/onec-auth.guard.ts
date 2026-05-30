@@ -6,13 +6,7 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 
-/**
- * Проверяет Bearer-токен на входящих запросах от 1С.
- * Ожидаемый токен задаётся в переменной окружения ONEC_INCOMING_TOKEN.
- *
- * Пример заголовка от 1С:
- *   Authorization: Bearer <ONEC_INCOMING_TOKEN>
- */
+// проверяет наличие токена для 1с
 @Injectable()
 export class OneCAuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {

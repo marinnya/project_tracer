@@ -14,7 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET, // ключ подписи токенов берется из env-переменной
-      signOptions: { expiresIn: '8h' }, // каждый выданный токен на 8 часов
+      signOptions: { expiresIn: '8h' },
     }),
   ],
   providers: [AuthService, JwtStrategy, PrismaService], 
