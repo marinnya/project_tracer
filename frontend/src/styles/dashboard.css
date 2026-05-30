@@ -154,6 +154,15 @@
   overflow: hidden;
   min-width: 180px;
   z-index: 1;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mobile-menu.open {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .mobile-menu button {

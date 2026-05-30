@@ -66,7 +66,6 @@ function Header({
     .toUpperCase() // приводим к верхнему регистру
     .slice(0, 2); // берем первые 2 буквы для инициала пользователя
 
-
   return (
     <header className="topbar">
       <div className="topbar-inner">
@@ -98,9 +97,11 @@ function Header({
               <img src="/arrow_down.png" alt="Меню" className={`arrow ${mobileMenuOpen ? "open" : ""}`}/>
               <div className="avatar mobile-only">{initials}</div>
 
-              {/* Мобильная кнопка "Проекты" */}
-              {mobileMenuOpen && (
-              <div className="mobile-menu">
+              <div
+                className={`mobile-menu ${mobileMenuOpen ? "open" : ""}`}
+                aria-hidden={!mobileMenuOpen}
+                onClick={(e) => e.stopPropagation()}
+              >
                   <button
                     className={`mobile-nav-btn ${isActive("/") ? "active" : ""}`}
                     onClick={() => {
@@ -112,12 +113,10 @@ function Header({
                     Проекты
                   </button>
 
-                  {/* Мобильная кнопка "Сотрудники" для админа*/}
                   {currentUser.role === "admin" && (
                       <button
                         className={`mobile-nav-btn ${isActive("/employees") ? "active" : ""}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={() => {
                           navigate("/employees");
                           setMobileMenuOpen(false);
                         }}
@@ -127,7 +126,6 @@ function Header({
                       </button>
                   )}
 
-                  {/* Кнопка "Выйти" */}
                   <button
                     className="logout-btn"
                     onClick={() => {
@@ -139,7 +137,6 @@ function Header({
                     Выйти
                   </button>
               </div>
-              )}
           </div>
               
           {/*Десктопное приветствие*/}
