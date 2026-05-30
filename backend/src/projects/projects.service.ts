@@ -1178,6 +1178,10 @@ export class ProjectsService implements OnModuleInit {
       }
     });
 
+    if (toDeleteIds.length) {
+      this.purgeDefectTmpFolders(projectId, toDeleteIds);
+    }
+
     return tempToSavedIdMap;
   }
 
@@ -1275,6 +1279,36 @@ export class ProjectsService implements OnModuleInit {
         }),
       ),
     );
+  }
+
+  /**
+   * После удаления дефектов из БД — убираем их папки в uploads/tmp/{projectId}/__defect__id__{id}/.
+   * Вызывается только после успешной транзакции saveDefects.
+   */
+  private purgeDefectTmpFolders(projectId: number, defectIds: number[]): void {
+    if (!defectIds.length) return;
+
+    const tmpBase = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
+    let freedBytes = 0;
+
+    for (const defectId of defectIds) {
+      const folder = path.join(tmpBase, `__defect__id__${defectId}`);
+      try {
+        if (!fs.existsSync(folder)) continue;
+        freedBytes += this.safeDirSizeBytes(folder);
+        fs.rmSync(folder, { recursive: true, force: true });
+      } catch {
+        // ignore — БД уже согласована, очистка диска best-effort
+      }
+    }
+
+    if (freedBytes > 0) {
+      try {
+        this.bumpTmpUsageBytes(projectId, -freedBytes);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   // Удаление из БД + локальный tmp-файл, если ещё не выгружен на Яндекс (уменьшаем .usage.json)

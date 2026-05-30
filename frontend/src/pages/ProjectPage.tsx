@@ -77,6 +77,10 @@ const formatDateForInput = (date: string | null) => {
   return new Date(date).toISOString().split("T")[0];
 };
 
+/** Следующий порядковый номер после уже сохранённых (не по количеству — после удаления из середины). */
+const maxPhotoOrder = (photos: { order: number }[]) =>
+  photos.reduce((max, p) => Math.max(max, p.order), 0);
+
 const formatDateDisplay = (date: string) => {
   if (!date) return "—";
   const [y, m, d] = date.split("-");
@@ -240,8 +244,9 @@ function ProjectPage({ onLogout }: Props) {
     for (const title of SECTIONS) {
       const saved = savedPhotos.filter(p => p.section === title).sort((a, b) => a.order - b.order);
       saved.forEach(p => meta.push({ originalName: p.originalName, section: title, order: p.order }));
+      const sectionBaseOrder = maxPhotoOrder(saved);
       sections[title].files.forEach((file, i) => {
-        meta.push({ originalName: file.name, section: title, order: saved.length + i + 1 });
+        meta.push({ originalName: file.name, section: title, order: sectionBaseOrder + i + 1 });
       });
     }
 
@@ -261,13 +266,14 @@ function ProjectPage({ onLogout }: Props) {
           order: p.order
         });
       });
+      const defectBaseOrder = maxPhotoOrder(savedDefPhotos);
       d.files.forEach((file, i) => {
         meta.push({
           originalName: file.name,
           section: 'Дефекты',
           defectId: d.id > 0 ? d.id : undefined,
           defectTypeName,
-          order: savedDefPhotos.length + i + 1
+          order: defectBaseOrder + i + 1
         });
       });
     }
@@ -428,6 +434,7 @@ function ProjectPage({ onLogout }: Props) {
         const saved = savedPhotos
           .filter(p => p.section === title)
           .sort((a, b) => a.order - b.order);
+        const sectionBaseOrder = maxPhotoOrder(saved);
         (compressedSections[title] ?? []).forEach((file, i) => {
           const clientKey = buildClientKey(file.name, globalIndex++);
           pendingUploads.push({
@@ -438,7 +445,7 @@ function ProjectPage({ onLogout }: Props) {
               section: title,
               originalName: file.name,
               clientKey,
-              order: saved.length + i + 1,
+              order: sectionBaseOrder + i + 1,
             },
           });
         });
@@ -446,7 +453,8 @@ function ProjectPage({ onLogout }: Props) {
 
       for (const d of defects) {
         const savedDef = savedDefects.find(sd => sd.id === d.id);
-        const savedCount = savedDef?.photos.length ?? 0;
+        const savedDefPhotos = savedDef?.photos ?? [];
+        const defectBaseOrder = maxPhotoOrder(savedDefPhotos);
         const defectId = resolvedDefectId(d.id);
         (compressedDefects[d.id] ?? []).forEach((file, i) => {
           const clientKey = buildClientKey(file.name, globalIndex++);
@@ -458,7 +466,7 @@ function ProjectPage({ onLogout }: Props) {
               defectId,
               originalName: file.name,
               clientKey,
-              order: savedCount + i + 1,
+              order: defectBaseOrder + i + 1,
             },
           });
         });
