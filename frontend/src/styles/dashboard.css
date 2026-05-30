@@ -675,6 +675,10 @@
     display: none;
   }
 
+  .content {
+    padding: 20px;
+  }
+
   .content-header {
     margin-bottom: 5px;
   }
@@ -689,5 +693,33 @@
 
   .employees-mobile {
     display: block;
+  }
+
+  /* Типографика списков — как на детальной странице проекта */
+  .project-title,
+  .employee-name {
+    font-size: 15px;
+  }
+
+  .project-dates,
+  .employee-credentials {
+    font-size: 13px;
+  }
+
+  .project-responsible {
+    font-size: 14px;
+  }
+
+  .projects-mobile .status,
+  .employees-mobile .status {
+    font-size: 13px;
+  }
+
+  .empty-state {
+    font-size: 15px;
+  }
+
+  .filter-dropdown button {
+    font-size: 15px;
   }
 }
