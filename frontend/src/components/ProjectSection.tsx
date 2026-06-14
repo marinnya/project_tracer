@@ -94,13 +94,13 @@ function ProjectSection({
   ], [savedPhotos, files]);
 
   const removeNewFile = (name: string) => {
-    onFilesChange(files.filter(f => f.name !== name));
+    onFilesChange(files.filter(f => f.name !== name)); // удаляет новый файл из списка по имени
   };
 
   const removeAll = () => {
     // удаляем только то, что можно удалить (не трогаем то, что уже на Яндексе)
-    savedPhotos.filter(p => !p.yandexPath).forEach(p => onRemoveSaved(p.id));
-    onFilesChange([]);
+    savedPhotos.filter(p => !p.yandexPath).forEach(p => onRemoveSaved(p.id)); // удаляет сохраненные фото, которые не на Яндексе
+    onFilesChange([]); // очищает список новых файлов
     setLocalError(null);
   };
 

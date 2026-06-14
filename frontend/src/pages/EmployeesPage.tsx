@@ -37,8 +37,8 @@ export default function EmployeesPage({ onLogout }: Props) {
   const [employees, setEmployees] = useState<EmployeeData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortField, setSortField] = useState<SortField>("name"); // поле для сортировки
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc"); // направление сортировки
 
   const filterRef = useRef<HTMLDivElement>(null);
   useClickOutside(filterRef as React.RefObject<HTMLElement>, () => setFilterOpen(false));
@@ -51,8 +51,8 @@ export default function EmployeesPage({ onLogout }: Props) {
     return [...list].sort((a, b) => {
       const valA = `${a.lastName} ${a.firstName}`.toLowerCase();
       const valB = `${b.lastName} ${b.firstName}`.toLowerCase();
-      if (valA < valB) return sortDirection === "asc" ? -1 : 1;
-      if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+      if (valA < valB) return sortDirection === "asc" ? -1 : 1; // A раньше B если asc, иначе B раньше A
+      if (valA > valB) return sortDirection === "asc" ? 1 : -1; // B раньше A если asc, иначе A раньше B
       return 0;
     });
   };

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
+// TypeScript-тип — описание того какую форму должен иметь объект проекта пришедший из 1С
+// Говорит компилятору: "объект типа OneCProject обязательно должен содержать эти поля с этими типами данных"
+// Если 1С пришлёт объект без поля name — TypeScript выдаст ошибку на этапе компиляции
+// export — чтобы этот тип можно было импортировать в других файлах (например в контроллере)
 export type OneCProject = {
   id: string;
   name: string;
@@ -21,10 +25,19 @@ export type OneCDefectType = {
   name: string;
 };
 
+// Декоратор NestJS — помечает класс как провайдер который можно внедрять через Dependency Injection
+// Без него NestJS не сможет автоматически создать экземпляр этого сервиса и передать его в конструктор контроллера
 @Injectable()
+// Объявляет и экспортирует класс сервиса
 export class OneCService {
+  // NestJS автоматически создаёт экземпляр PrismaService и передаёт его сюда
+  // После этого во всех методах класса доступен this.prisma для работы с базой данных
   constructor(private readonly prisma: PrismaService) {}
 
+  // метод асинхронный, внутри будут запросы к БД которые занимают время
+  // Без async нельзя использовать await
+  // Три параметра метода — массивы объектов соответствующих типов
+  // OneCProject[] - "массив объектов типа OneCProject"
   async syncAndReturnData(
     projects: OneCProject[],
     employees: OneCEmployee[],
@@ -104,7 +117,7 @@ export class OneCService {
   async getEmployeesForSelect() {
     const users = await this.prisma.user.findMany({ where: { oneCId: { not: null } } });
     return users.map((u) => ({
-      id: u.oneCId,
+      id: u.oneCId, 
       firstName: u.firstName,
       lastName: u.lastName,
       displayName: `${u.lastName} ${u.firstName}`.trim(),

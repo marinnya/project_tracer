@@ -22,7 +22,7 @@ export class AuthController {
     return req.user; // возвращает данные юзера, которые JwtStrategy положил в req.user после верификации токена
   }
 
-  // запрос на восстановление — отправляет письмо с логином и ссылкой на смену пароля
+  // запрос на восстановление - отправляет письмо с логином и ссылкой на смену пароля
   @Post('forgot-password')
   async forgotPassword(@Body() body: { email: string }) { // получает email из тела запроса
     await this.authService.requestPasswordReset(body.email); // ищет юзера по email и отправляет письмо со ссылкой вида /reset-password?token=...

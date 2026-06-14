@@ -35,7 +35,7 @@ export class ProjectsController {
 
   constructor(private readonly projectService: ProjectsService) {} // внедряем сервис
 
-  // SSE-эндпоинт для отслеживания прогресса загрузки на Яндекс.Диск
+  // SSE-эндпоинт для отслеживания прогресса загрузки на Яндекс Диск
   @Get(':id/upload-progress')
   uploadProgress(
     @Param('id', ParseIntPipe) projectId: number, // id проекта из URL, ParseIntPipe автоматически преобразует строку из URL в число
@@ -69,6 +69,7 @@ export class ProjectsController {
     return this.projectService.getDefects(projectId);
   }
 
+  // 1 этап: сюда шлем только метаданные файлов
   // возвращает сколько места занимают временные файлы проекта
   @Get(':id/tmp-usage')
   async getTmpUsage(@Param('id', ParseIntPipe) projectId: number) {
@@ -76,21 +77,27 @@ export class ProjectsController {
   }
 
   @Patch(':id/save')
+  // интерцептор используется для подключения multer
+  // До выполнения saveDraft() Nest сначала обработает загруженные файлы
   @UseInterceptors(
+    // ожидается поле формы с именем files, максимум 200 файлов
+    // например <input type="file" name="files" multiple>
     FilesInterceptor('files', 200, {
       storage: multer.diskStorage({
         destination: (req, _file, cb) => {
-          const projectId = String(req.params.id);
-          const incomingDir = path.join(process.cwd(), 'uploads', 'incoming', projectId);
-          fs.mkdirSync(incomingDir, { recursive: true });
-          cb(null, incomingDir);
+          const projectId = String(req.params.id); // получаем id проекта из URL
+          const incomingDir = path.join(process.cwd(), 'uploads', 'incoming', projectId); // формируем путь
+          fs.mkdirSync(incomingDir, { recursive: true }); // создаем папку, если её нет, recursive: true - создаёт все промежуточные папки
+          cb(null, incomingDir); // callback; ошибки нет,передаем путь в multer
         },
+        // функция определяет имя файла на диске
         filename: (_req, file, cb) => {
-          const decodedOriginalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-          const ext = path.extname(decodedOriginalName);
-          cb(null, `${randomUUID()}${ext}`);
+          const decodedOriginalName = Buffer.from(file.originalname, 'latin1').toString('utf8'); // декодируем имя файла из latin1 в utf8 для кириллицы
+          const ext = path.extname(decodedOriginalName); // получаем расширение файла
+          cb(null, `${randomUUID()}${ext}`); // генерируем новое уникальное имя + расширение
         },
       }),
+      // ограничения на размер и количество файлов
       limits: {
         fileSize: 10 * 1024 * 1024, // 10MB на файл
         files: 200, // максимум 200 файлов
@@ -99,21 +106,24 @@ export class ProjectsController {
   )
   async saveDraft(
     @Param('id', ParseIntPipe) projectId: number,
+    // Express.Multer.File[] - массив объектов файлов
     @UploadedFiles() files: Express.Multer.File[], // Достаёт загруженные файлы — multer уже сохранил их на диск, здесь просто метаданные (путь, имя, размер)
     @Body()
     body: {
-      sections: string;
-      sectionPhotos: string;
-      defects: string;
-      deletedPhotos?: string;
-      fileToSection?: string;
-      fileKeys?: string;
+      sections: string; // секции и страницы
+      sectionPhotos: string; // пока пустой
+      defects: string; // список дефектов
+      deletedPhotos?: string; // какие фото удалить из бд
+      fileToSection?: string; // пока пустой
+      fileKeys?: string; // пока пустой
     },
   ) {
     this.logger.log(`Сохранение черновика. projectId: ${projectId}, файлов: ${files?.length ?? 0}`);
+    // передаем projectId, files и body в сервис
     return this.projectService.saveDraft(projectId, files ?? [], body);
   }
 
+  // 2 этап: сюда шлем только файлы (sections, defects, deletedPhotos уже сохранены на 1 шаге)
   @Patch(':id/save-files')
   @UseInterceptors(
     FilesInterceptor('files', 50, {
@@ -157,40 +167,50 @@ export class ProjectsController {
    * (`percent` до 100 и `done`, либо `percent: -1`).
    */
   @Post(':id/upload')
+  // принудительно устанавливаем статус 202 - Accepted, запрос принят, но обработка идёт в фоне
   @HttpCode(HttpStatus.ACCEPTED)
   async uploadFiles(
+    // параметр id из URL
     @Param('id', ParseIntPipe) projectId: number,
+    // тело запроса вида { projectName: string; photos: [] }
     @Body() body: { projectName: string; photos: string },
   ) {
     this.logger.log(`Запуск фоновой загрузки проекта ${projectId} на Яндекс.Диск`);
 
+    // создаем переменную
     let photos: unknown;
     try {
-      photos = JSON.parse(body.photos);
+      photos = JSON.parse(body.photos); // парсим JSON из body.photos
     } catch {
       throw new BadRequestException('Некорректный JSON в поле photos');
     }
 
+    // проверка, не идет ли уже загрузка на Яндекс для этого проекта
     if (!this.projectService.tryBeginYandexUpload(projectId)) {
       throw new ConflictException(
         'Загрузка этого проекта на Яндекс.Диск уже выполняется. Дождитесь завершения.',
       );
     }
 
+    // запускаем Promise (загрузка) и не ждем его завершения (photos - массив PhotoMeta)
     void this.projectService
       .uploadProjectFiles(projectId, body.projectName, photos as PhotoMeta[])
+      // then - когда загрузка завершена успешно
       .then(() => {
         this.projectService.sendProgress(projectId, 100, true);
       })
+      // catch - когда загрузка завершилась с ошибкой
       .catch((e: unknown) => {
         const message = e instanceof Error ? e.message : String(e);
         this.logger.error(message);
         this.projectService.sendProgress(projectId, -1, true);
       })
+      // finally - выполняется всегда,когда загрузка завершилась, независимо от результата
       .finally(() => {
-        this.projectService.endYandexUpload(projectId);
+        this.projectService.endYandexUpload(projectId); // удаляем проект из активных загрузок?
       });
 
+    // сразу после запуска фоновой задачи возвращается
     return {
       accepted: true,
       message: 'Загрузка запущена; следите за прогрессом в потоке событий.',

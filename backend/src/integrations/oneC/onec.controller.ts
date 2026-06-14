@@ -8,6 +8,8 @@ export class OneCController {
   // создаем логгер
   private readonly logger = new Logger(OneCController.name);
 
+  // NestJS видит что контроллеру нужен OneCService, автоматически создаёт его и передаёт сюда
+  // После этого oneCService доступен во всех методах контроллера через this.oneCService
   constructor(private readonly oneCService: OneCService) {}
 
   // слушает POST /onec/sync

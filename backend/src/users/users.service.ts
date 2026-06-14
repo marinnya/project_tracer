@@ -28,6 +28,7 @@ const PASSWORD_ERROR =
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
+  // Метод create() принимает объект data
   async create(data: {
     firstName: string;
     lastName: string;
@@ -60,7 +61,7 @@ export class UsersService {
     const roleEnum: Role =
       data.role?.toUpperCase() === 'ADMIN' ? Role.ADMIN : Role.EMPLOYEE;
 
-    // если передан oneCId — ищем существующего пользователя (в т.ч. удалённого)
+    // если передан oneCId - ищем существующего пользователя (в т.ч. удалённого)
     if (data.oneCId) {
       const existingByOneCId = await this.prisma.user.findUnique({
         where: { oneCId: data.oneCId },
@@ -72,7 +73,7 @@ export class UsersService {
           where: {
             login: data.login,
             deletedAt: null,
-            NOT: { id: existingByOneCId.id },
+            NOT: { id: existingByOneCId.id }, // исключаем самого себя из проверки
           },
         });
 
@@ -127,16 +128,18 @@ export class UsersService {
     return user;
   }
 
+  // Метод findAllEmployees() возвращает список всех сотрудников для таблицы в админке
   async findAllEmployees() {
     return this.prisma.user.findMany({
       where: {
         role: Role.EMPLOYEE, // только сотрудники
         deletedAt: null, // только не удалённые
-        NOT: { login: { startsWith: 'onec_' } }, // исключаем еще не добавленныхсотрудников из 1С
+        NOT: { login: { startsWith: 'onec_' } }, // исключаем еще не добавленных сотрудников из 1С
       },
     });
   }
 
+  // Метод blockUser() блокирует/разблокирует пользователя по id
   async blockUser(userId: string, value: boolean) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -144,7 +147,7 @@ export class UsersService {
     });
   }
 
-  // Мягкое удаление — проставляет текущую дату вместо физического удаления из БД
+  // Мягкое удаление - проставляет текущую дату вместо физического удаления из БД
   async deleteUser(userId: string) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -177,7 +180,7 @@ export class UsersService {
         where: {
           login: data.login,
           deletedAt: null,
-          NOT: { id: userId },
+          NOT: { id: userId }, // исключаем самого себя из проверки
         },
       });
 
@@ -185,7 +188,7 @@ export class UsersService {
         throw new BadRequestException('Логин уже занят');
       }
 
-      updateData.login = data.login;
+      updateData.login = data.login; // добавляем введенный логин в updateData
     }
 
     if (data.password) {
@@ -202,3 +205,10 @@ export class UsersService {
     });
   }
 }
+
+/* Пример объекта updateData:
+updateData = {
+  login: "new_user",
+  passwordHash: "$2b$10$abc123..."
+}
+*/

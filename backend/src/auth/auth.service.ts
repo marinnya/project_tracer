@@ -19,7 +19,10 @@ const validatePassword = (password: string): boolean => {
 const PASSWORD_ERROR =
   'Пароль должен быть не менее 8 символов и содержать заглавную, строчную латинскую букву и цифру';
 
+// Декоратор NestJS — помечает класс как провайдер который можно внедрять через Dependency Injection
+// Без него NestJS не сможет автоматически создать экземпляр этого сервиса и передать его в конструктор контроллера
 @Injectable()
+// Объявляет и экспортирует класс сервиса
 export class AuthService {
   private transporter = nodemailer.createTransport({ // создаёт объект для отправки почты через Яндекс SMTP
     host: 'smtp.yandex.ru', // хост SMTP сервера Яндекса
@@ -78,7 +81,7 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // действует 1 час
     // удаляет все токены для этого юзера, чтобы не было дубликатов
     await this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
-    // сохраняет новый токен в БД, привязав в юзеру
+    // сохраняет новый токен в БД, привязав к юзеру
     await this.prisma.passwordResetToken.create({
       data: { token, userId: user.id, expiresAt },
     });
@@ -86,6 +89,8 @@ export class AuthService {
     // формируем ссылку для письма
     const resetUrl = `${process.env.APP_URL}/reset-password?token=${token}`;
 
+    // transporter - объект для отправки почты через Яндекс SMTP
+    // sendMail() - метод для отправки письма
     try { // отправляем письмо с ссылкой на сброс пароля
       await this.transporter.sendMail({
         from: `"Project Tracer" <${process.env.YANDEX_MAIL_USER}>`,

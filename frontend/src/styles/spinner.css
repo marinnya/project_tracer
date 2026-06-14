@@ -1,20 +1,21 @@
 .spinner-fullscreen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  background: #f5f5f5;
+  display: flex; /* для align-items и justify-content */
+  align-items: center; /* для вертикального центрирования */
+  justify-content: center; /* для горизонтального центрирования */
+  min-height: 100vh; /* высота окна браузера целиком */
+  background: #f5f5f5; /* светло-серый фон */
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e0e0e0;
-  border-top-color: #2aa3ff;
-  border-radius: 50%;
-  animation: spin 0.75s linear infinite;
+  border: 3px solid #e0e0e0; /* светло-сервая рамка вокруг квадрата */
+  border-top-color: #2aa3ff; /* синий цвет только верхней части рамки */
+  border-radius: 50%; /* делаем квадрат кругом */
+  animation: spin 0.75s linear infinite; /* spin - имя анимации, 0.75s - длительность одного оборота, linear - постоянная скорость, infinite - бесконечное повторение */
 }
 
+/* создаем анимацию с именем spin */
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to { transform: rotate(360deg); } /* поворачиваем на полный оборот (360 градусов) */
 }

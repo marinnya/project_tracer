@@ -60,9 +60,10 @@ export class ProjectsService implements OnModuleInit {
   private readonly baseUrl = 'https://cloud-api.yandex.net/v1/disk/resources';
   private readonly BATCH_SIZE = 10; // размер пачки файлов для загрузки (параллельно)
   // 3 минуты таймаут на один HTTP-запрос к Яндексу — на слабом канале большой файл может грузиться долго
-  private readonly YANDEX_HTTP_TIMEOUT_MS = 180_000;
-  private readonly yandexRootFolder =
-    process.env.YANDEX_ROOT_FOLDER ?? 'ТестБотПТО/ТестПриложения';
+  private readonly YANDEX_HTTP_TIMEOUT_MS = 180_000; // 3 минуты
+  private readonly yandexRootFolder = process.env.YANDEX_ROOT_FOLDER ?? 'Сделки';
+  private readonly yandexEngineerDataFolder =
+    process.env.YANDEX_ENGINEER_DATA_FOLDER ?? 'Данные инженеров';
   
   // Лимиты — 300 страниц на раздел, 2000 фото на проект, 2.5ГБ на диске
   private readonly MAX_PAGES_PER_SECTION = 300;
@@ -223,29 +224,30 @@ export class ProjectsService implements OnModuleInit {
       files,
       body.fileToSection,
       body.fileKeys,
-    );
+    ); // вернет {photo1: "3b4a-uuid.jpg", photo2: "9c7d-uuid.jpg"} ?
 
     // Парсим json-строку секций и сохраняем черновик в БД
-    const sections = JSON.parse(body.sections) as Record<string, { pages: number }>;
+    const sections = JSON.parse(body.sections) as Record<string, { pages: number }>; // {roof: { pages: 10 }, wall: { pages: 5 }}
     await this.saveDraftSections(projectId, sections);
 
     // Удаляем помеченные фото
-    const deletedPhotos = JSON.parse(body.deletedPhotos ?? '[]') as number[];
+    const deletedPhotos = JSON.parse(body.deletedPhotos ?? '[]') as number[]; // id фото для удаления
     if (deletedPhotos.length) {
       await this.deletePhotos(deletedPhotos);
     }
 
-    // Сохраняем дефекты
+    // Сохраняем дефекты, приходящие из multipart/form-data?
     const rawDefects = JSON.parse(body.defects) as {
-      id?: number;
+      id?: number; // поле может отсутствовать
       typeId: number | string;
       pages: number | string;
-      newPhotos: { originalName: string; clientKey: string; order: number }[];
+      newPhotos: { originalName: string; clientKey: string; order: number }[]; // {originalName: "photo1.jpg", clientKey: "photo1", order: 1}?
     }[];
 
-    
+    // отбрасываем дефекты с пустым typeId или pages
     const defects = rawDefects
       .filter((d) => d.typeId !== '' && d.typeId !== null && Number(d.pages) > 0)
+      // создается новый объект дефекта
       .map((d) => ({
         id: d.id,
         typeId: Number(d.typeId),
@@ -266,11 +268,11 @@ export class ProjectsService implements OnModuleInit {
       // сопоставляет каждое фото с именем файла на диске через clientKey и сохраняет в БД
       const photosWithStoredName = d.newPhotos.map((p) => ({
         originalName: p.originalName,
-        storedName: clientKeyToStoredName[p.clientKey] ?? null,
+        storedName: clientKeyToStoredName[p.clientKey] ?? null, // формат {photo1: "3b4a-uuid.jpg", photo2: "9c7d-uuid.jpg"} ?
         order: p.order,
       }));
 
-      await this.saveTempDefectPhotos(savedDefectId, projectId, photosWithStoredName);
+      await this.saveTempDefectPhotos(savedDefectId, projectId, photosWithStoredName); // сохраняем фото дефекта в БД
     }
 
     // если секционные фото пришли в этом же запросе - сохраняем их
@@ -289,10 +291,10 @@ export class ProjectsService implements OnModuleInit {
         order: p.order,
       }));
 
-      await this.saveTempPhotos(projectId, sectionPhotosWithStoredName);
+      await this.saveTempPhotos(projectId, sectionPhotosWithStoredName); // сохраняем секционные фото в БД
     }
 
-    return { message: 'Черновик сохранён', defectIdMap }; // подтверждение фронту и маппинг временных id - фронтиспользует его для след. запроса /save-files
+    return { message: 'Черновик сохранён', defectIdMap }; // подтверждение фронту и маппинг временных id - фронт использует его для след. запроса /save-files
   }
 
   /**
@@ -306,13 +308,13 @@ export class ProjectsService implements OnModuleInit {
   ) {
     // проверяет не превысит ли добавление файлов лимит 2.5гб до операций с БД
     this.enforceProjectLocalStorageLimit(projectId, files);
-    this.validateDraftFileBatchLimits(body);
+    this.validateDraftFileBatchLimits(body); // проверяет не превысит ли добавление файлов лимит 300 фото на секцию/дефект за запрос, проверяет текущий батч
 
     // переносит файлы из uploads/incoming/{projectId} в uploads/tmp/{projectId}/{subfolder}/.
     const clientKeyToStoredName = this.persistIncomingFiles(
       projectId,
       files,
-      body.fileToSection,
+      body.fileToSection, // {photo1: "roof", photo2: "wall"} - секция для каждого фото?
       body.fileKeys,
     );
 
@@ -353,20 +355,25 @@ export class ProjectsService implements OnModuleInit {
         }
       }
       // Группируем по defectId — saveTempDefectPhotos вызываем отдельно на каждый дефект (вместо одного на каждое фото)
+
       const byDefect = new Map<number, { originalName: string; storedName: string | null; order: number }[]>();
+      // берем каждое фото
       for (const p of defectPhotos) {
-        const defectId = Number(p.defectId);
-        const list = byDefect.get(defectId) ?? [];
+        const defectId = Number(p.defectId); // получаем id дефекта
+        const list = byDefect.get(defectId) ?? []; // получаем список фото для этого дефекта по id
+        // добавляем фото в список
         list.push({
-          originalName: p.originalName,
-          storedName: p.clientKey ? (clientKeyToStoredName[p.clientKey] ?? null) : null,
-          order: p.order,
+          originalName: p.originalName, // имя файла
+          storedName: p.clientKey ? (clientKeyToStoredName[p.clientKey] ?? null) : null, // имя файла на диске
+          order: p.order, // порядок
         });
-        byDefect.set(defectId, list);
+        // сохраняем обратно в Map по id дефекта
+        byDefect.set(defectId, list); // добавляем фото в Map по id дефекта
       }
       // сохраняем фото каждого дефекта отдельно
+      // Map разворачивается на пары: id дефекта и список фото для этого дефекта
       for (const [defectId, defectFiles] of byDefect) {
-        await this.saveTempDefectPhotos(defectId, projectId, defectFiles);
+        await this.saveTempDefectPhotos(defectId, projectId, defectFiles); // сохраняем фото каждого дефекта отдельно
       }
     }
 
@@ -380,29 +387,32 @@ export class ProjectsService implements OnModuleInit {
    */
   private persistIncomingFiles(
     projectId: number,
-    files: Express.Multer.File[],
-    fileToSectionRaw?: string,
-    fileKeysRaw?: string,
+    files: Express.Multer.File[], // массив файлов от multer 
+    fileToSectionRaw?: string, // в какую секцию положить каждый файл {"photo1":"roof", "photo2":"wall"}
+    fileKeysRaw?: string, // ключи файлов с фронта ["photo1", "photo2"]
   ) {
     // парсим метаданные
     const fileToSection: Record<string, string> = fileToSectionRaw
       ? JSON.parse(fileToSectionRaw)
       : {};
     const fileKeys: string[] = fileKeysRaw ? JSON.parse(fileKeysRaw) : [];
+
+    // позже будет {photo1: "3b4a-uuid.jpg", photo2: "9c7d-uuid.jpg"} - словарь с ключами файлов и их именами на диске
     const clientKeyToStoredName: Record<string, string> = {};
 
-    if (!files?.length) return clientKeyToStoredName;
+    if (!files?.length) return clientKeyToStoredName; // если нет файлов, то возвращаем пустой словарь
 
-    let movedBytes = 0;
+    let movedBytes = 0; // счетчик перемещенных байтов, используется в bumpTmpUsageBytes
+    // перебираем файлы
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+      const file = files[i]; // берем текущий файл
       // multer отдаёт originalname в latin1 — декодируем в utf8 для кириллицы
       const decodedOriginalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-      // clientKey — стабильный ключ (порядок) с фронта; storedName — uuid-имя на диске.
-      const clientKey = fileKeys[i] ?? decodedOriginalName;
+      // clientKey — стабильный ключ (порядок) с фронта; storedName — uuid-имя на диске
+      const clientKey = fileKeys[i] ?? decodedOriginalName; // clientKey = "photo1" или "photo2"
       // subfolder = название секции или __defect__id__{id} для дефектов
       // определяет подпапку, если секция не указана - в misc
-      const subfolder = fileToSection[clientKey] ?? 'misc';
+      const subfolder = fileToSection[clientKey] ?? 'misc'; // subfolder = "roof" или "wall"
       //path.basename берёт только имя файла без пути. Если имени нет — пропускает
       const storedName = path.basename(file.filename ?? '');
       if (!storedName) continue;
@@ -412,7 +422,7 @@ export class ProjectsService implements OnModuleInit {
       // создаём папку, если её нет, recursive: true - создаёт все промежуточные папки
       fs.mkdirSync(uploadPath, { recursive: true });
 
-      // Пробует переименовать (быстро, атомарно). 
+      // Пробует переименовать (быстро, атомарно)
       // Если не получилось (разные файловые системы) — копирует и удаляет оригинал
       if (file.path) {
         try {
@@ -422,17 +432,19 @@ export class ProjectsService implements OnModuleInit {
           fs.unlinkSync(file.path);
         }
       } else {
-        // если файл не перемещён, создаём новый файл с uuid-именем
-        const ext = path.extname(decodedOriginalName);
-        const fallbackName = `${uuidv4()}${ext}`;
+        // если multer работает через memoryStorage, то файл в памяти, на диске его еще нет (file.path нет и делаем вручную)
+        const ext = path.extname(decodedOriginalName); // расширение
+        const fallbackName = `${uuidv4()}${ext}`; // fallbackName = "3b4a-uuid.jpg"
+        // создаем файл (байты из памяти записываем на диск)
         fs.writeFileSync(path.join(uploadPath, fallbackName), file.buffer!);
-        clientKeyToStoredName[clientKey] = fallbackName;
+        clientKeyToStoredName[clientKey] = fallbackName; // {photo1: "3b4a-uuid.jpg"}
         this.logger.log(`Сохранён файл: ${decodedOriginalName} -> ${fallbackName} (папка: ${subfolder})`);
-        movedBytes += Number(file.size) || 0;
+        movedBytes += Number(file.size) || 0; // добавляем размер файла в счетчик
         continue;
       }
 
-      clientKeyToStoredName[clientKey] = storedName;
+      // если multer работает через diskStorage, то файл уже на диске
+      clientKeyToStoredName[clientKey] = storedName; // {photo1: "3b4a-uuid.jpg"}
       this.logger.log(`Сохранён файл: ${decodedOriginalName} -> ${storedName} (папка: ${subfolder})`);
       movedBytes += Number(file.size) || 0;
     }
@@ -440,13 +452,14 @@ export class ProjectsService implements OnModuleInit {
     // обновляет счетчик занятого места
     if (movedBytes > 0) {
       try {
-        this.bumpTmpUsageBytes(projectId, movedBytes);
+        this.bumpTmpUsageBytes(projectId, movedBytes); // обновляем счетчик занятого места в .usage.json
       } catch {
         // если не смогли записать usage — не ломаем сохранение, просто будет медленнее/неточнее
       }
     }
 
-    return clientKeyToStoredName;
+    // возвращаем словарь с ключами файлов (фронт) и их именами на диске (бэк)
+    return clientKeyToStoredName; // {photo1: "3b4a-uuid.jpg", photo2: "9c7d-uuid.jpg"}
   }
 
   // Не даём забить диск: сумма tmp проекта + новые файлы не больше MAX_PROJECT_LOCAL_BYTES
@@ -456,16 +469,17 @@ export class ProjectsService implements OnModuleInit {
     const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
 
     const currentBytes = this.readTmpUsageBytes(projectId) ?? this.safeDirSizeBytes(tmpDir);
+    // incomingBytes = сумма всех file.size в incomingFiles
     const incomingBytes = incomingFiles.reduce((s, f) => s + (Number(f.size) || 0), 0);
-    const nextBytes = currentBytes + incomingBytes;
+    const nextBytes = currentBytes + incomingBytes; // считаем сколько будет после добавления
 
-    // считает сколько будет после добавления: если не превышает лимит, выходим
+    //  если не превышает лимит, выходим
     if (nextBytes <= this.MAX_PROJECT_LOCAL_BYTES) return;
 
-    // файлы уже записаны multer'ом в uploads/incoming/... — очищаем их, чтобы не забивать диск
+    // файлы уже записаны multerом в uploads/incoming/... — очищаем их, чтобы не забивать диск
     for (const f of incomingFiles) {
       try {
-        if (f?.path && fs.existsSync(f.path)) fs.unlinkSync(f.path);
+        if (f?.path && fs.existsSync(f.path)) fs.unlinkSync(f.path); // удаляем файл
       } catch {
         // ignore
       }
@@ -480,6 +494,7 @@ export class ProjectsService implements OnModuleInit {
     );
   }
 
+  // КОЛИЧЕСТВО БАЙТОВ НА ПРОЕКТ
   // Кэш объёма в .usage.json — быстрее, чем каждый раз обходить дерево tmp
   // возвращает путь к файлу-счетчику .usage.json для проекта
   private usageFilePath(projectId: number) {
@@ -504,9 +519,9 @@ export class ProjectsService implements OnModuleInit {
   private bumpTmpUsageBytes(projectId: number, deltaBytes: number) {
     const p = this.usageFilePath(projectId); // получаем путь к файлу-счетчику
     fs.mkdirSync(path.dirname(p), { recursive: true }); // создаём папку, если её нет (при первом сохранении), recursive: true - создаёт все промежуточные папки
-    const current = this.readTmpUsageBytes(projectId) ?? 0;
-    const next = Math.max(0, current + (Number(deltaBytes) || 0)); // защищает от отрицательных значений
-    fs.writeFileSync(p, JSON.stringify({ bytes: next }), 'utf8'); // перезаписывает файл целиком с новым значением
+    const current = this.readTmpUsageBytes(projectId) ?? 0; // берем текущее значение байтов или 0 если нет файла
+    const next = Math.max(0, current + (Number(deltaBytes) || 0)); // считаем новое значение байтов (не даем уйти в минус 0 макс)
+    fs.writeFileSync(p, JSON.stringify({ bytes: next }), 'utf8'); // перезаписывает файл целиком с новым значением или создаем (если его не было)
   }
 
   // Для фронта: сколько занято локально по проекту и какой потолок (2.5 ГБ)
@@ -527,41 +542,43 @@ export class ProjectsService implements OnModuleInit {
 
   // считает размер папки рекурсивно?
   private dirSizeBytes(dirPath: string): number {
-    if (!fs.existsSync(dirPath)) return 0;
-    const stat = fs.statSync(dirPath);
-    if (stat.isFile()) return stat.size;
-    if (!stat.isDirectory()) return 0;
+    if (!fs.existsSync(dirPath)) return 0; // если папки/файла нет, возвращаем размер 0
+    const stat = fs.statSync(dirPath); // получаем информацию о папке/файле {size: 1024, isFile: true, isDirectory: false}
+    if (stat.isFile()) return stat.size; // если это файл, возвращаем его размер, рекурсия дальше не идет
+    if (!stat.isDirectory()) return 0; // если это не файл/папка, возвращаем размер 0
 
     // Обрабатывает три случая: папки нет, это файл (возвращает его размер), 
     // это что-то другое (символическая ссылка и т.д.)
-    let total = 0;
+    let total = 0; // счетчик байтов
+    // читаем содержимое папки, возвращает список имен ["a.jpg", "b.jpg", "subfolder"]
     for (const entry of fs.readdirSync(dirPath)) {
-      total += this.dirSizeBytes(path.join(dirPath, entry));
+      total += this.dirSizeBytes(path.join(dirPath, entry)); // строим полный путь /tmp/123/cat.jpg и рекурсивно считаем размер (заходим в подпапки)
     }
     return total;
   }
 
   // Лимиты для PATCH /save: страницы по секциям/дефектам и фото в этом же запросе
   private validateDraftLimits(body: SaveDraftBody) {
-    const sections = JSON.parse(body.sections ?? '{}') as Record<string, { pages: number }>;
-    const defects = JSON.parse(body.defects ?? '[]') as Array<{ pages: number | string }>;
-    const sectionPhotos = JSON.parse(body.sectionPhotos ?? '[]') as Array<{ section: string }>;
+    const sections = JSON.parse(body.sections ?? '{}') as Record<string, { pages: number }>; // {roof: { pages: 10 }, wall: { pages: 5 }}
+    const defects = JSON.parse(body.defects ?? '[]') as Array<{ pages: number | string }>; // [{ pages: 10 }, { pages: 5 }]
+    const sectionPhotos = JSON.parse(body.sectionPhotos ?? '[]') as Array<{ section: string }>; // [{ section: "roof" }, { section: "wall" }] - секция для каждой фото
 
-    // Проверяет каждый раздел — сообщение об ошибке содержит имя проблемного раздела. 
+    // Проверяет каждый раздел - сообщение об ошибке содержит имя проблемного раздела
     // Накапливает суммарное количество страниц
     let totalPages = 0;
+    // приводим к виду ["roof", { pages: 10 }]
     for (const [sectionName, sectionValue] of Object.entries(sections)) {
-      const pages = Number(sectionValue?.pages ?? 0);
-      if (!Number.isInteger(pages) || pages < 0 || pages > this.MAX_PAGES_PER_SECTION) {
+      const pages = Number(sectionValue?.pages ?? 0); // берем количество страниц из секции
+      if (!Number.isInteger(pages) || pages < 0 || pages > this.MAX_PAGES_PER_SECTION) { // проверяем что количество страниц валидное
         throw new BadRequestException(
           `Раздел "${sectionName}": количество страниц должно быть от 0 до ${this.MAX_PAGES_PER_SECTION}`,
-        );
+        ); // если не валидно, то выбрасываем ошибку
       }
-      totalPages += pages;
+      totalPages += pages; // добавляем количество страниц в общую сумму
     }
 
     for (const defect of defects) {
-      const pages = Number(defect.pages ?? 0);
+      const pages = Number(defect.pages ?? 0); // берем количество страниц из дефекта
       if (!Number.isInteger(pages) || pages < 0 || pages > this.MAX_PAGES_PER_DEFECT) {
         throw new BadRequestException(
           `Для дефекта количество страниц должно быть от 0 до ${this.MAX_PAGES_PER_DEFECT}`,
@@ -577,13 +594,15 @@ export class ProjectsService implements OnModuleInit {
       );
     }
 
-    // Считает фото по секциям через Map — ?? 0 чтобы начать с нуля для новой секции. 
+    // Считает фото по секциям через Map — ?? 0 чтобы начать с нуля для новой секции
     // Потом проверяет каждую секцию на превышение лимита 300 фото
-    const sectionPhotoCount = new Map<string, number>();
+    const sectionPhotoCount = new Map<string, number>(); // {roof: 10, wall: 5}
     for (const photo of sectionPhotos) {
-      const section = photo.section ?? 'misc';
+      const section = photo.section ?? 'misc'; // берем секцию фото
       sectionPhotoCount.set(section, (sectionPhotoCount.get(section) ?? 0) + 1);
     }
+    
+    // перебираем пары: секция - количество фото
     for (const [section, count] of sectionPhotoCount) {
       if (count > this.MAX_PHOTOS_PER_SECTION) {
         throw new BadRequestException(
@@ -593,17 +612,23 @@ export class ProjectsService implements OnModuleInit {
     }
   }
 
-  // Лимиты для одной пачки PATCH /save-files (не больше 300 фото на секцию/дефект за запрос)
+  // Лимиты для одной пачки PATCH /save-files (не больше 300 фото на секцию/дефект за запрос, проверяет текущий батч)
+  /*body = {
+    sectionPhotos: '[{"section":"roof"},{"section":"roof"},{"section":"wall"}]',
+    defectPhotos: '[{"defectId":15},{"defectId":15}]'
+  }*/
   private validateDraftFileBatchLimits(body: SaveDraftFilesBody) {
-    const sectionPhotos = JSON.parse(body.sectionPhotos ?? '[]') as Array<{ section: string }>;
-    const defectPhotos = JSON.parse(body.defectPhotos ?? '[]') as Array<{ defectId: number }>;
+    const sectionPhotos = JSON.parse(body.sectionPhotos ?? '[]') as Array<{ section: string }>; // [{ section: "roof" }, { section: "wall" }] - секция для каждого фото
+    const defectPhotos = JSON.parse(body.defectPhotos ?? '[]') as Array<{ defectId: number }>; // [{ defectId: 1 }, { defectId: 2 }] - дефект для каждого фото
 
     // Счётчик по секциям — ключ строка (название секции)
     const sectionPhotoCount = new Map<string, number>();
     for (const photo of sectionPhotos) {
       const section = photo.section ?? 'misc';
+      // добавляем в Map секцию и количество фото в этой секции
       sectionPhotoCount.set(section, (sectionPhotoCount.get(section) ?? 0) + 1);
     }
+    // перебираем пары: секция - количество фото ['roof': 10, 'wall': 5]
     for (const [section, count] of sectionPhotoCount) {
       if (count > this.MAX_PHOTOS_PER_SECTION) {
         throw new BadRequestException(
@@ -617,8 +642,10 @@ export class ProjectsService implements OnModuleInit {
     const defectPhotoCount = new Map<number, number>();
     for (const photo of defectPhotos) {
       const defectId = Number(photo.defectId);
+      // добавляем в Map дефект и количество фото в этом дефекте
       defectPhotoCount.set(defectId, (defectPhotoCount.get(defectId) ?? 0) + 1);
     }
+    // перебираем пары: дефект - количество фото [1: 10, 2: 5]
     for (const [defectId, count] of defectPhotoCount) {
       if (count > this.MAX_PHOTOS_PER_DEFECT) {
         throw new BadRequestException(
@@ -628,11 +655,11 @@ export class ProjectsService implements OnModuleInit {
     }
   }
 
-  // ─── UPLOAD TO YANDEX ───────────────────────────────────────────────────────
+  // ЗАГРУЗКА НА ЯНДЕКС ДИСК
 
   /**
-   * Полный цикл «отправить проект на Яндекс.Диск»:
-   * сопоставить метаданные с БД → прочитать tmp → uploadToYandex → записать yandexPath → архив → удалить tmp.
+   * Полный цикл «отправить проект на Яндекс Диск»:
+   * сопоставить метаданные с БД - прочитать tmp - uploadToYandex - записать yandexPath - архив - удалить tmp
    */
   async uploadProjectFiles(
     projectId: number,
@@ -642,16 +669,21 @@ export class ProjectsService implements OnModuleInit {
     const savedPhotos = await this.getProjectPhotos(projectId);
     const savedDefects = await this.getDefects(projectId);
 
+    // разворачиваем дефектные фото [{ photo A + typeName }, { photo C + typeName }]
     const defectPhotosFlat = savedDefects.flatMap((d) =>
       d.photos.map((p) => ({ ...p, typeName: d.defectType.name })),
     );
 
-    // Обогащаем метаданные фото данными из БД
+    // берем фото, пришедшие с фронта, и пытаемся найти их в БД
     const photosWithMeta = photos.map((p) => {
+      // в match кладем найденную запись из БД
       let match: { id: number; yandexPath: string | null; filename: string | null } | undefined;
 
+      // если фото дефекта
       if (p.section === 'Дефекты') {
+        // ищем фото в списке дефектных фото
         const found = defectPhotosFlat.find(
+          // ищем по 3 условиям: id дефекта, имя файла, порядок (защита от дублирования)
           (sp) =>
             (
               (p.defectId ? sp.defectId === p.defectId : sp.typeName === p.defectTypeName)
@@ -659,21 +691,25 @@ export class ProjectsService implements OnModuleInit {
             sp.originalName === p.originalName &&
             sp.order === p.order,
         );
+        // кладем найденное в match
         match = found
           ? { id: found.id, yandexPath: found.yandexPath, filename: found.filename }
           : undefined;
       } else {
+        // если фото секции, то ищем по 3 условиям: секция, имя файла, порядок (защита от дублирования)
         const found = savedPhotos.find(
           (sp) =>
             sp.section === p.section &&
             sp.originalName === p.originalName &&
             sp.order === p.order,
         );
+        // кладем найденное в match
         match = found
           ? { id: found.id, yandexPath: found.yandexPath, filename: found.filename }
           : undefined;
       }
 
+      // у каждого фото есть что пришло с фронта и что найдено в БД (id, yandexPath, filename)
       return {
         ...p,
         dbId: match?.id ?? null,
@@ -682,11 +718,14 @@ export class ProjectsService implements OnModuleInit {
       };
     });
 
+    // получаем путь к временной папке
     const tmpDir = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
     this.logger.log(`Всего фото в запросе: ${photos.length}`);
 
-    // Только фото без yandexPath — уже выгруженные на Диск повторно не трогаем
-    const files = await this.readTempFiles(tmpDir, photosWithMeta);
+    // Только фото без yandexPath - уже выгруженные на Диск повторно не трогаем
+    // читаем файлы из временной папки
+    const files = await this.readTempFiles(tmpDir, photosWithMeta); // возвращает массив файлов, готовых к загрузке на Яндекс UploadFile[]?
+    // проверяем что количество файлов в спсике совпадает с количеством фото без yandexPath
     const pendingLocalCount = photosWithMeta.filter((p) => !p.yandexPath).length;
     if (files.length !== pendingLocalCount) {
       this.logger.error(
@@ -699,16 +738,20 @@ export class ProjectsService implements OnModuleInit {
 
     this.logger.log(`Файлов для загрузки: ${files.length}`);
 
+    // загружаем файлы на Яндекс
     const { folderUrl, renamedPhotos } = await this.uploadToYandex(
       files,
       projectName,
       photosWithMeta,
       (uploaded, total) => {
         const percent = total === 0 ? 95 : Math.round(10 + (uploaded / total) * 85);
+        // отправляет % в реальном времени
         this.sendProgress(projectId, Math.min(percent, 95));
       },
     );
 
+    // функция для поиска переименованных файлов
+    // ищет соотвествие фронтовое фото - файл на Яндекс
     const findRenamed = (p: PhotoMeta) =>
       renamedPhotos.find(
         (r) =>
@@ -720,17 +763,17 @@ export class ProjectsService implements OnModuleInit {
 
     // Сохраняем пути для секционных фото
     const sectionPhotosWithPath = photos
-      .filter((p) => p.section !== 'Дефекты')
+      .filter((p) => p.section !== 'Дефекты') // берем только секционные фото
       .map((p) => {
         const match = findRenamed(p);
         const filename = match?.filename ?? p.originalName;
-        const yandexProjectRoot = this.getYandexProjectRoot(projectName);
+        const yandexPhotosRoot = this.getYandexEngineerDataRoot(projectName);
         return {
           section: p.section,
           defectId: null,
           originalName: p.originalName,
           filename,
-          yandexPath: `${yandexProjectRoot}/${p.section ?? 'Дефекты'}/${filename}`,
+          yandexPath: `${yandexPhotosRoot}/${p.section ?? 'Дефекты'}/${filename}`,
           order: p.order,
         };
       });
@@ -744,7 +787,7 @@ export class ProjectsService implements OnModuleInit {
       .flatMap((p) => {
         const match = findRenamed(p);
         const filename = match?.filename ?? p.originalName;
-        const yandexPath = `${this.getYandexProjectRoot(projectName)}/${p.section ?? 'Дефекты'}/${filename}`;
+        const yandexPath = `${this.getYandexEngineerDataRoot(projectName)}/${p.section ?? 'Дефекты'}/${filename}`;
         const meta = photosWithMeta.find(
           (pm) =>
             pm.originalName === p.originalName &&
@@ -770,8 +813,7 @@ export class ProjectsService implements OnModuleInit {
   }
 
   // YANDEX DISK
-
-  // Объект с заколовком авторизации для всех запросов к cloud-api.yandex.net
+  // Объект с заголовком авторизации для всех запросов к cloud-api.yandex.net
   private getHeaders() {
     return { Authorization: `OAuth ${process.env.YANDEX_TOKEN}` };
   }
@@ -803,11 +845,12 @@ export class ProjectsService implements OnModuleInit {
 
   // PUT запрос к API Яндекса /resources? для создания папки; 409 = уже существует, не ошибка
   private async createFolder(folderPath: string): Promise<void> {
+    // операция может упасть, поэтому в try/catch
     try {
       await axios.put(
-        `${this.baseUrl}?path=${encodeURIComponent(folderPath)}`,
+        `${this.baseUrl}?path=${encodeURIComponent(folderPath)}`, // путь к создаваемой папке (кодируем для URL безопасно)
         undefined, // тело запроса пустое (Яндексу не нужно для создания папки)
-        { headers: this.getHeaders(), timeout: this.YANDEX_HTTP_TIMEOUT_MS },
+        { headers: this.getHeaders(), timeout: this.YANDEX_HTTP_TIMEOUT_MS }, // добавляем заголовки и максимальное время ожидания
       );
     } catch (e: unknown) {
       // если ошибка 409 - папка уже существует, не ошибка
@@ -818,20 +861,21 @@ export class ProjectsService implements OnModuleInit {
     }
   }
 
-  // Создаёт цепочку вложенных папок: A → A/B → A/B/C
+  // Создаёт цепочку вложенных папок: A - A/B - A/B/C
   private async ensureFolderPath(folderPath: string): Promise<void> {
     const normalized = folderPath.replace(/^\/+|\/+$/g, ''); // убираем слеши в начале и в конце пути
     if (!normalized) return; // если после очистки строка пустая нечего создавать
-    const parts = normalized.split('/').filter(Boolean); // разбиваем путь на части по / и убираем пустые
+    const parts = normalized.split('/').filter(Boolean); // разбиваем путь на части по / и убираем пустые элементы "a", "b", "c"
     // создаем папки последовательно от корня (сначала а, потом а/в и тд)
-    let current = '';
+    let current = ''; // хранит накопленный путь
+    // перебираем все части пути
     for (const part of parts) {
-      current = current ? `${current}/${part}` : part;
-      await this.createFolder(current);
+      current = current ? `${current}/${part}` : part; // собираем путь вида a/b/c
+      await this.createFolder(current); // создаем папку для текущего пути
     }
   }
 
-  // Двухшаговая загрузка Яндекса: GET upload URL → PUT тела файла по href
+  // Двухшаговая загрузка Яндекса: GET upload URL - PUT тела файла по href
   private async uploadFile(file: UploadFile, folderPath: string): Promise<void> {
     const filename = Buffer.from(file.originalname, 'latin1').toString('utf8'); // декодируем имя файла из latin1 в utf8 для кириллицы?
     // кодируем путь и имя файла для URL (отдельно без слеша), encodeURIComponent - экранирует спецсимволы в URL
@@ -846,7 +890,8 @@ export class ProjectsService implements OnModuleInit {
 
     // Второй шаг — загружает файл по полученному URL. 
     // maxBodyLength/maxContentLength: Infinity — снимает ограничение axios на размер тела запроса, иначе большие файлы упадут с ошибкой
-    const fileBuffer = file.buffer ?? fs.readFileSync(file.path!); // читаем файл из памяти или с диска
+    const fileBuffer = file.buffer ?? fs.readFileSync(file.path!); // читаем физический файл из памяти или с диска
+    // отправляем сам файл по полученному URL
     await axios.put(data.href, fileBuffer, {
       headers: { 'Content-Type': file.mimetype },
       timeout: this.YANDEX_HTTP_TIMEOUT_MS,
@@ -859,23 +904,29 @@ export class ProjectsService implements OnModuleInit {
   private async getPublicUrl(folderName: string): Promise<string> {
     // Публикует папку — делает её доступной по публичной ссылке. 
     // PUT /publish — метод API Яндекс.Диска для публикации
-    const encodedPath = encodeURIComponent(folderName);
+    const encodedPath = encodeURIComponent(folderName); // кодируем путь для URL
+    // отправляем запрос на публикацию папки (publish делает ресурс публичным)
     await axios.put(`${this.baseUrl}/publish?path=${encodedPath}`, undefined, {
       headers: this.getHeaders(),
       timeout: this.YANDEX_HTTP_TIMEOUT_MS,
     });
     // Получает метаданные папки и возвращает поле public_url — это и есть ссылка которая сохранится в folderUrl
+    // отправляем get запрос на получение метаданных папки
     const { data } = await axios.get(`${this.baseUrl}?path=${encodedPath}`, {
       headers: this.getHeaders(),
       timeout: this.YANDEX_HTTP_TIMEOUT_MS,
     });
-    return data.public_url;
+    return data.public_url; // возвращает публичную ссылку на папку
   }
 
-  // Собирает полный путь к папке проекта на Яндексе. 
-  // Все проекты лежат в одной корневой папке — ТестБотПТО/ТестПриложения/НазваниеПроекта
+  // Сделки/НазваниеПроекта
   private getYandexProjectRoot(projectName: string) {
     return `${this.yandexRootFolder}/${projectName}`;
+  }
+
+  // Сделки/НазваниеПроекта/Данные инженеров — здесь лежат папки секций и фото
+  private getYandexEngineerDataRoot(projectName: string) {
+    return `${this.getYandexProjectRoot(projectName)}/${this.yandexEngineerDataFolder}`;
   }
 
   /**
@@ -884,7 +935,7 @@ export class ProjectsService implements OnModuleInit {
    * при отсутствии — резервный поиск по имени файла во всём дереве tmp.
    */
   async readTempFiles(
-    tmpDir: string,
+    tmpDir: string, // путь к временной папке, где лежат файлы
     photos: {
       originalName: string;
       section: string | null;
@@ -895,32 +946,40 @@ export class ProjectsService implements OnModuleInit {
       storedName?: string | null;
     }[],
   ): Promise<UploadFile[]> {
-    // Фильтрует фото?
+    // берем только те фото, которые еще не загружены на Яндекс
     const newPhotos = photos.filter((p) => !p.yandexPath);
     if (!newPhotos.length) return [];
 
-    //Рекурсивно индексирует все файлы в tmp-папке проекта в Map имя → полный путь. 
+    //Рекурсивно индексирует все файлы в tmp-папке проекта в Map имя - полный путь. 
     // withFileTypes: true — получает тип сразу без дополнительного statSync. 
-    // !tempFilePathIndex.has(item.name) — не перезаписывает если имя уже есть, берёт первый найденный
+    // !tempFilePathIndex.has(item.name) - не перезаписывает если имя уже есть, берёт первый найденный
     const tempFilePathIndex = new Map<string, string>();
+    // функция проходит по всем подпапкам tmpDir
     const indexTmpFiles = (dir: string) => {
-      if (!fs.existsSync(dir)) return;
+      if (!fs.existsSync(dir)) return; // если папка не существует, то выходим
+      // читаем содержимое папки
       const items = fs.readdirSync(dir, { withFileTypes: true });
+      // перебираем все элементы в папке
       for (const item of items) {
+        // собираем полный путь к файлу/папке
         const fullPath = path.join(dir, item.name);
+        // если это папка, то рекурсивно заходим внутрь нее
         if (item.isDirectory()) {
           indexTmpFiles(fullPath);
-        } else if (!tempFilePathIndex.has(item.name)) {
-          tempFilePathIndex.set(item.name, fullPath);
+        } else if (!tempFilePathIndex.has(item.name)) { // если это файл и его имя не в Map, то добавляем в Map
+          tempFilePathIndex.set(item.name, fullPath); // добавляем в Map имя файла - полный путь
         }
       }
     };
-    indexTmpFiles(tmpDir);
+    indexTmpFiles(tmpDir); // запускаем функцию для индексации файлов
 
+    // массив для файлов для загрузки на Яндекс
     const result: UploadFile[] = [];
 
     // Восстанавливает ожидаемую подпапку — дефектные фото лежат в __defect__id__123, секционные в папке с именем секции
+    // берем каждое новое фото
     for (const photo of newPhotos) {
+      // определяем подпапку
       const subfolder = photo.defectId
         ? `__defect__id__${photo.defectId}`
         : (photo.section ?? 'misc');
@@ -964,10 +1023,11 @@ export class ProjectsService implements OnModuleInit {
         defectId: photo.defectId,
         defectTypeName: photo.defectTypeName,
         order: photo.order,
-        buffer: undefined,
+        buffer: undefined, // файл на диске, не в памяти
       });
     }
 
+    // возвращаем массив файлов, готовых к загрузке на Яндекс
     return result;
   }
 
@@ -976,8 +1036,8 @@ export class ProjectsService implements OnModuleInit {
    * Уже выгруженные (yandexPath) только попадают в renamedPhotos без повторной upload.
    */
   async uploadToYandex(
-    files: UploadFile[],
-    projectName: string,
+    files: UploadFile[], // массив файлов, готовых к загрузке на Яндекс (с диска сервера)
+    projectName: string, // имя проекта (будет папкой на Яндекс)
     photos: {
       originalName: string;
       section: string | null;
@@ -986,32 +1046,35 @@ export class ProjectsService implements OnModuleInit {
       order: number;
       yandexPath?: string | null;
     }[],
-    onProgress?: (uploaded: number, total: number) => void,
+    // callback для отображения прогресса загрузки
+    onProgress?: (uploaded: number, total: number) => void, // uploaded - количество загруженных файлов, total - общее количество файлов
   ): Promise<{
-    message: string;
-    folderUrl: string;
+    message: string; // сообщение о результате загрузки
+    folderUrl: string; // ссылка на папку на Яндекс
+    // список переименованных фото
     renamedPhotos: {
-      originalName: string;
-      section: string | null;
-      defectTypeName?: string;
-      order: number;
-      filename: string;
+      originalName: string; // оригинальное имя файла
+      section: string | null; // секция
+      defectTypeName?: string; // тип дефекта
+      order: number; // порядок
+      filename: string; // новое имя файла?
     }[];
   }> {
     // Гарантируем существование корневой папки и папки проекта внутри неё
-    // Создаёт корневую папку и папку проекта если их нет — последовательно, сначала корень потом проект
+    // Создаёт корневую папку и папку проекта если их нет — последовательно, сначала корень, потом проект
     await this.ensureFolderPath(this.yandexRootFolder);
     const yandexProjectRoot = this.getYandexProjectRoot(projectName);
     await this.ensureFolderPath(yandexProjectRoot);
+    const yandexPhotosRoot = this.getYandexEngineerDataRoot(projectName);
+    await this.ensureFolderPath(yandexPhotosRoot);
 
-    // Собирает уникальные секции через Set — одна папка на секцию даже если фото много. Создаёт подпапку для каждой
     const folders = new Set<string>();
     photos.forEach((p) => folders.add(p.section ?? 'Дефекты'));
     for (const folder of folders) {
-      await this.ensureFolderPath(`${yandexProjectRoot}/${folder}`);
+      await this.ensureFolderPath(`${yandexPhotosRoot}/${folder}`);
     }
 
-    // Делит на две группы — те что нужно загрузить и те что уже на Яндексе
+    // Делит на две группы - те что нужно загрузить и те что уже на Яндексе
     const newPhotos = photos.filter((p) => !p.yandexPath);
     const alreadyUploaded = photos.filter((p) => p.yandexPath);
 
@@ -1035,28 +1098,30 @@ export class ProjectsService implements OnModuleInit {
       filename: string;
     }[] = [];
 
-    // Для уже загруженных фото извлекает имя файла из пути на Яндексе — split('/').pop() берёт последний сегмент URL
+    // Для уже загруженных фото извлекает имя файла из пути на Яндексе - split('/').pop() берёт последний сегмент URL
     for (const p of alreadyUploaded) {
-      const existingFilename = p.yandexPath!.split('/').pop() ?? p.originalName;
+      // https://disk.ru/project/file.jpg - последний сегмент - file.jpg
+      const existingFilename = p.yandexPath!.split('/').pop() ?? p.originalName; // берёт последний сегмент или оригинальное имя
+      // добавляет в список переименованных фото
       renamedPhotos.push({ originalName: p.originalName, section: p.section, defectTypeName: p.defectTypeName, order: p.order, filename: existingFilename });
     }
 
-    const totalNew = files.length;
-    let uploadedCount = 0;
+    const totalNew = files.length; // сколько всего загружаем
+    let uploadedCount = 0; // сколько уже загружено
 
     // Нарезает файлы на батчи по BATCH_SIZE (10). slice(i, i+10) — берёт срез массива
     for (let i = 0; i < files.length; i += this.BATCH_SIZE) {
-      const batch = files.slice(i, i + this.BATCH_SIZE);
+      const batch = files.slice(i, i + this.BATCH_SIZE); // берем кусок массива [0...9], [10...19]
 
       // Запускает загрузку всех файлов батча параллельно и ждёт пока все завершатся
       await Promise.all(
         batch.map((file) => {
           // Конвертирует имя обратно в utf8 для работы с ним
           const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-          const fileSection = file.section ?? 'Дефекты';
-          const fileDefectId = file.defectId;
-          const fileDefectTypeName = file.defectTypeName;
-          const fileOrder = file.order ?? i + 1;
+          const fileSection = file.section ?? 'Дефекты'; // секция
+          const fileDefectId = file.defectId; // id дефекта
+          const fileDefectTypeName = file.defectTypeName; // тип дефекта
+          const fileOrder = file.order ?? i + 1; // порядок или позиция в батче
           // Ищет метаданные фото в Map по тому же составному ключу
           const key = `${originalName}|||${fileSection}|||${fileDefectId ?? ''}|||${fileOrder}`;
           const meta = photoMap.get(key);
@@ -1068,29 +1133,30 @@ export class ProjectsService implements OnModuleInit {
 
           //Генерирует красивое имя файла для загрузки и сразу добавляет в список переименованных
           const renamedFilename = this.getRenamedFilename(originalName, section, defectTypeName, order);
+          // добавляет в список переименованных фото новое имя файла
           renamedPhotos.push({ originalName, section, defectTypeName, order, filename: renamedFilename });
 
           // Создаёт копию объекта файла с новым именем в latin1 — uploadFile будет конвертировать его обратно
           const renamedFile: UploadFile = {
-            ...file,
-            originalname: Buffer.from(renamedFilename).toString('latin1'),
+            ...file, // копирует файл
+            originalname: Buffer.from(renamedFilename).toString('latin1'), // добавляет новое имя файла
           };
 
           // Загружает файл в папку секции. .catch — перехватывает ошибку и оборачивает в 500 с именем проблемного файла
-          return this.uploadFile(renamedFile, `${yandexProjectRoot}/${section}`).catch((e: unknown) => {
+          return this.uploadFile(renamedFile, `${yandexPhotosRoot}/${section}`).catch((e: unknown) => {
             const message = e instanceof Error ? e.message : String(e);
             throw new InternalServerErrorException(`Ошибка загрузки файла ${originalName}: ${message}`);
           });
         }),
       );
 
-      // После каждого батча обновляет счётчик. Math.min — последний батч может быть меньше 10, не выходим за пределы. ?. — вызывает колбэк только если он передан
+      // После каждого батча обновляет счётчик количества загруженных. Math.min — последний батч может быть меньше 10, не выходим за пределы. ?. — вызывает колбэк только если он передан
       uploadedCount = Math.min(i + this.BATCH_SIZE, totalNew);
       onProgress?.(uploadedCount, totalNew);
     }
 
     // После всех батчей публикует папку и возвращает результат — ссылку и список переименованных файлов
-    const folderUrl = await this.getPublicUrl(yandexProjectRoot);
+    const folderUrl = await this.getPublicUrl(yandexProjectRoot); // https://disk.yandex.ru/d/abc123
     return { message: 'Файлы успешно загружены', folderUrl, renamedPhotos };
   }
 
@@ -1172,20 +1238,21 @@ export class ProjectsService implements OnModuleInit {
         } else {
           const created = await tx.defect.create({ data: { projectId, typeId, pages } });
           if (d.id && d.id < 0) {
-            tempToSavedIdMap[d.id] = created.id;
+            tempToSavedIdMap[d.id] = created.id; // временный id - реальный id?
           }
         }
       }
     });
 
+    // если есть id для удаления
     if (toDeleteIds.length) {
       this.purgeDefectTmpFolders(projectId, toDeleteIds);
     }
 
-    return tempToSavedIdMap;
+    return tempToSavedIdMap; // возвращаем словарь временныйId - реальныйId?
   }
 
-  // Добавляет записи projectPhoto для секций (yandexPath пока null) — без дублей по filename
+  // Добавляет записи projectPhoto для секций (yandexPath пока null) - без дублей по filename
   async saveTempPhotos(
     projectId: number,
     photos: { section: string; originalName: string; storedName: string | null; order: number }[],
@@ -1201,7 +1268,7 @@ export class ProjectsService implements OnModuleInit {
         select: { filename: true },
       });
       const existingNames = new Set(existing.map((p) => p.filename).filter(Boolean));
-      // Исключает дубли — если файл с таким именем уже записан в БД, не создаёт повторно
+      // Исключает дубли - если файл с таким именем уже записан в БД, не создаёт повторно
       // Ранний выход если все фото уже есть
       const toCreate = newPhotos.filter((p) => !existingNames.has(p.storedName));
       if (!toCreate.length) return;
@@ -1217,21 +1284,22 @@ export class ProjectsService implements OnModuleInit {
     });
   }
 
-  // То же для фото дефекта — привязка к defectId
+  // То же для фото дефекта - привязка к defectId
   async saveTempDefectPhotos(
     defectId: number,
     projectId: number,
     photos: { originalName: string; storedName: string | null; order: number }[],
   ) {
-    const newPhotos = photos.filter((p) => p.storedName);
+    const newPhotos = photos.filter((p) => p.storedName); // берем только фото, у которых есть имя файлва на диске
     if (!newPhotos.length) return;
 
     await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.projectPhoto.findMany({
+      const existing = await tx.projectPhoto.findMany({ // ищем фото которые уже есть в БД
         where: { defectId },
         select: { filename: true },
       });
-      const existingNames = new Set(existing.map((p) => p.filename).filter(Boolean));
+      const existingNames = new Set(existing.map((p) => p.filename).filter(Boolean)); // создаем множество из имен фото которые уже есть в БД: Set {"uuid1.jpg", "uuid2.jpg"}
+      // оставляем только те фото, которых еще нет в БД (в existingNames)
       const toCreate = newPhotos.filter((p) => !existingNames.has(p.storedName));
       if (!toCreate.length) return;
 
@@ -1282,29 +1350,30 @@ export class ProjectsService implements OnModuleInit {
   }
 
   /**
-   * После удаления дефектов из БД — убираем их папки в uploads/tmp/{projectId}/__defect__id__{id}/.
+   * После удаления дефектов из БД - убираем их папки в uploads/tmp/{projectId}/__defect__id__{id}/.
    * Вызывается только после успешной транзакции saveDefects.
    */
   private purgeDefectTmpFolders(projectId: number, defectIds: number[]): void {
-    if (!defectIds.length) return;
+    if (!defectIds.length) return; // если нет id для удаления, выходим
 
-    const tmpBase = path.join(process.cwd(), 'uploads', 'tmp', String(projectId));
-    let freedBytes = 0;
+    const tmpBase = path.join(process.cwd(), 'uploads', 'tmp', String(projectId)); // путь к папке с временными файлами
+    let freedBytes = 0; // счетчик освобожденных байтов
 
     for (const defectId of defectIds) {
-      const folder = path.join(tmpBase, `__defect__id__${defectId}`);
+      const folder = path.join(tmpBase, `__defect__id__${defectId}`); // путь к папке с дефектом
       try {
-        if (!fs.existsSync(folder)) continue;
-        freedBytes += this.safeDirSizeBytes(folder);
-        fs.rmSync(folder, { recursive: true, force: true });
+        if (!fs.existsSync(folder)) continue; // если папка не существует, пропускаем
+        freedBytes += this.safeDirSizeBytes(folder); // добавляем размер папки к счетчику
+        fs.rmSync(folder, { recursive: true, force: true }); // удаляем папку
       } catch {
-        // ignore — БД уже согласована, очистка диска best-effort
+        // ignore — БД уже согласована, очистка диска
       }
     }
 
+    // если освободилось место после удаления папки с дефектом
     if (freedBytes > 0) {
       try {
-        this.bumpTmpUsageBytes(projectId, -freedBytes);
+        this.bumpTmpUsageBytes(projectId, -freedBytes); // обновляем счетчик занятого места в .usage.json
       } catch {
         // ignore
       }
@@ -1315,20 +1384,21 @@ export class ProjectsService implements OnModuleInit {
   async deletePhotos(photoIds: number[]) {
     // ?.length — защита если передали null или undefined вместо массива
     if (!photoIds?.length) return;
-    // Сначала загружает метаданные — нужны чтобы найти и удалить файлы на диске перед удалением из БД
+    // Сначала загружает метаданные - нужны чтобы найти и удалить файлы на диске перед удалением из БД
     const photos = await this.prisma.projectPhoto.findMany({
       where: { id: { in: photoIds } },
       select: { id: true, projectId: true, defectId: true, section: true, filename: true, yandexPath: true },
     });
 
     // Удаляем локальные temp-файлы, если они ещё не выгружены на Яндекс
-    // Накапливает сколько байт освободилось по каждому проекту — чтобы потом одним вызовом обновить счётчик (id проекта - сколько байт освободилось)
+    // Накапливает сколько байт освободилось по каждому проекту - чтобы потом одним вызовом обновить счётчик (id проекта - сколько байт освободилось)
     const freedBytesByProject = new Map<number, number>();
+    // перебираем фото
     for (const p of photos) {
-      if (p.yandexPath) continue; // Файл уже на Яндексе — локальная копия не существует, нечего удалять
+      if (p.yandexPath) continue; // Файл уже на Яндексе - локальная копия не существует, нечего удалять
       if (!p.filename) continue; // Нет имени файла - не надо удалять
 
-      // Восстанавливает путь к файлу — дефектные фото лежат в __defect__id__123, секционные в папке с именем секции
+      // Восстанавливает путь к файлу - дефектные фото лежат в __defect__id__123, секционные в папке с именем секции
       const subfolder = p.defectId ? `__defect__id__${p.defectId}` : (p.section ?? 'misc');
       const filePath = path.join(process.cwd(), 'uploads', 'tmp', String(p.projectId), subfolder, p.filename);
       try {
@@ -1343,17 +1413,19 @@ export class ProjectsService implements OnModuleInit {
       }
     }
 
+    // если освободилось
     if (freedBytesByProject.size) {
       try {
+        // перебираем проекты и освобожденные байты
         for (const [projectId, bytes] of freedBytesByProject) {
-          this.bumpTmpUsageBytes(projectId, -bytes); // Отрицательный delta — уменьшает счётчик на освобождённые байты
+          this.bumpTmpUsageBytes(projectId, -bytes); // Отрицательный delta - уменьшает счётчик на освобожденные байты
         }
       } catch {
         // ignore
       }
     }
 
-    // Удаляет из БД одним запросом все фото сразу — в самом конце, после успешной очистки диска
+    // Удаляет из БД одним запросом все фото сразу - в самом конце, после успешной очистки диска
     return this.prisma.projectPhoto.deleteMany({ where: { id: { in: photoIds } } });
   }
 
