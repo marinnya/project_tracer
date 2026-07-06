@@ -410,6 +410,7 @@ function ProjectPage({ onLogout }: Props) {
         "Титульный лист": { files: [...], pages: 2 },
         "План-схема склада": { files: [...], pages: 5 },
       }*/
+      // сумма чисел из селекта
       const sectionPagesSum = SECTIONS.reduce((s, t) => s + sections[t].pages, 0);
       const defectPagesSum = defects.reduce((s, d) => s + (Number(d.pages) || 0), 0);
       const totalPagesDeclared = sectionPagesSum + defectPagesSum;

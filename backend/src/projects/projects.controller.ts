@@ -23,6 +23,9 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { Express } from 'express';
 import type { Response } from 'express';
+
+/** Синхронно с MAX_PHOTO_FILE_BYTES на фронте (frontend/src/constants/uploads.ts) */
+const MAX_PHOTO_FILE_BYTES = 20 * 1024 * 1024;
 import { ProjectsService, PhotoMeta } from './projects.service';
 import { Logger } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt.guard';
@@ -99,7 +102,7 @@ export class ProjectsController {
       }),
       // ограничения на размер и количество файлов
       limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB на файл
+        fileSize: MAX_PHOTO_FILE_BYTES,
         files: 200, // максимум 200 файлов
       },
     }),
@@ -141,7 +144,7 @@ export class ProjectsController {
         },
       }),
       limits: {
-        fileSize: 10 * 1024 * 1024,
+        fileSize: MAX_PHOTO_FILE_BYTES,
         files: 50,
       },
     }),
