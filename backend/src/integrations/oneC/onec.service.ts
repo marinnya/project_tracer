@@ -102,9 +102,10 @@ export class OneCService {
       }
     });
 
-    // После транзакции возвращает актуальный список проектов с дефектами - за пределами транзакции, обычным клиентом
+    // В ответ 1С — только проекты «в работе» (без archivedAt); архивные не отправляем
     return this.prisma.project.findMany({
-      include: { defects: true }
+      where: { archivedAt: null },
+      include: { defects: true },
     });
   }
 
